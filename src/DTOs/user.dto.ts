@@ -1,4 +1,5 @@
 import {
+  IsString,
   IsEmail,
   IsNotEmpty,
   IsOptional,
@@ -48,6 +49,7 @@ export class LoginDTO {
 }
 
 export class RefreshTokenDTO {
-  @IsNotEmpty({ message: "Refresh token is required" })
-  refreshToken!: string;
+  @IsOptional()
+  @IsString({ message: "Refresh token must be a string" })
+  refreshToken?: string;
 }

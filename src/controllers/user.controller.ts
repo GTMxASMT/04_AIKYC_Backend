@@ -1,33 +1,35 @@
 import { Request, Response } from "express";
-import { userService } from "../services/user.service";
+import { UserService } from "../services/user.service";
 import { ApiResponse } from "../utilities/ApiResponse";
 import { asyncHandler } from "../utilities/AsyncHandler";
 import { ApiError } from "../utilities/ApiError";
 
-const httpOptions = {
+const accessTokenCookieOptions = () => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
-  sameSite: "strict",
-  maxAge: 15 * 60 * 1000, // 15 minutes
-};
+  sameSite: "strict" as const,
+  maxAge: 24 * 60 * 1000,
+});
+
+const refreshTokenCookieOptions = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "strict" as const,
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days - match JWT expiry
+});
+
+const userService = new UserService();
 
 export class UserController {
   register = asyncHandler(async (req: Request, res: Response) => {
     const { user, tokens } = await userService.register(req.body);
 
-    res.cookie("accessToken", tokens.accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 15 * 60 * 1000, // 15 minutes
-    });
-
-    res.cookie("refreshToken", tokens.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
+    res.cookie("accessToken", tokens.accessToken, accessTokenCookieOptions());
+    res.cookie(
+      "refreshToken",
+      tokens.refreshToken,
+      refreshTokenCookieOptions()
+    );
 
     res
       .status(201)
@@ -36,68 +38,62 @@ export class UserController {
       );
   });
 
-  // Login user
   login = asyncHandler(async (req: Request, res: Response) => {
     const { user, tokens } = await userService.login(req.body);
 
-    // Set HTTP-only cookies
-    res.cookie("accessToken", tokens.accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 15 * 60 * 1000, // 15 minutes
-    });
-
-    res.cookie("refreshToken", tokens.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
+    res.cookie("accessToken", tokens.accessToken, accessTokenCookieOptions());
+    res.cookie(
+      "refreshToken",
+      tokens.refreshToken,
+      refreshTokenCookieOptions()
+    );
 
     res
       .status(200)
       .json(new ApiResponse(200, { user, tokens }, "Login successful"));
   });
 
-  // Refresh token
   refreshToken = asyncHandler(async (req: Request, res: Response) => {
-    console.log(
-      "Refreshing token...",
-      req.body.refreshToken,
-      "-",
-      req.cookies.refreshToken
-    );
+    console.log("Refresh token request:", {
+      bodyToken: req.body.refreshToken ? "present" : "missing",
+      cookieToken: req.cookies.refreshToken ? "present" : "missing",
+      bodyKeys: Object.keys(req.body),
+      cookies: Object.keys(req.cookies || {}),
+    });
 
-    const refreshToken = req.body.refreshToken || req.cookies.refreshToken;
+    let refreshToken =
+      req.body.refreshToken ||
+      req.body.refresh_token ||
+      req.cookies.refreshToken;
+
     if (!refreshToken) {
       throw new ApiError(401, "Refresh token is required");
     }
-    const { tokens } = await userService.refreshToken(refreshToken);
 
-    // Set new HTTP-only cookies
-    res.cookie("accessToken", tokens.accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 15 * 60 * 1000, // 15 minutes
-    });
+    try {
+      const { tokens } = await userService.refreshToken(refreshToken);
 
-    res.cookie("refreshToken", tokens.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
+      res.cookie("accessToken", tokens.accessToken, accessTokenCookieOptions());
+      res.cookie(
+        "refreshToken",
+        tokens.refreshToken,
+        refreshTokenCookieOptions()
+      );
 
-    res
-      .status(200)
-      .json(new ApiResponse(200, { tokens }, "Token refreshed successfully"));
+      res
+        .status(200)
+        .json(new ApiResponse(200, { tokens }, "Token refreshed successfully"));
+    } catch (error) {
+      res.clearCookie("accessToken");
+      res.clearCookie("refreshToken");
+      throw error;
+    }
   });
 
-  // Logout user
   logout = asyncHandler(async (req: Request, res: Response) => {
-    await userService.logout(req.user!.id);
+    if (req.user?.id) {
+      await userService.logout(req.user.id);
+    }
 
     // Clear cookies
     res.clearCookie("accessToken");
@@ -106,14 +102,12 @@ export class UserController {
     res.status(200).json(new ApiResponse(200, null, "Logout successful"));
   });
 
-  // Get current user profile
   getProfile = asyncHandler(async (req: Request, res: Response) => {
     res
       .status(200)
       .json(new ApiResponse(200, req.user, "Profile retrieved successfully"));
   });
 
-  // Get all users (Admin only)
   getAllUsers = asyncHandler(async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
@@ -137,7 +131,6 @@ export class UserController {
     );
   });
 
-  // Get user by ID
   getUserById = asyncHandler(async (req: Request, res: Response) => {
     const user = await userService.getUserById(req.params.id);
 
@@ -146,7 +139,6 @@ export class UserController {
       .json(new ApiResponse(200, user, "User retrieved successfully"));
   });
 
-  // Update user
   updateUser = asyncHandler(async (req: Request, res: Response) => {
     const user = await userService.updateUser(req.params.id, req.body);
 
@@ -155,7 +147,6 @@ export class UserController {
       .json(new ApiResponse(200, user, "User updated successfully"));
   });
 
-  // Delete user
   deleteUser = asyncHandler(async (req: Request, res: Response) => {
     await userService.deleteUser(req.params.id);
 
@@ -164,7 +155,6 @@ export class UserController {
       .json(new ApiResponse(200, null, "User deleted successfully"));
   });
 
-  // Upload profile image
   uploadProfileImage = asyncHandler(async (req: Request, res: Response) => {
     if (!req.file) {
       res.status(400).json(new ApiResponse(400, null, "No file uploaded"));
@@ -178,6 +168,104 @@ export class UserController {
     res
       .status(200)
       .json(new ApiResponse(200, user, "Profile image uploaded successfully"));
+  });
+
+  processDocument = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file) {
+      res.status(400).json(new ApiResponse(400, null, "No file uploaded"));
+      return;
+    }
+
+    if (!req.user) {
+      res.status(401).json(new ApiResponse(401, null, "Unauthorized"));
+      return;
+    }
+
+    const result = await userService.processDocument(req.user.id, req.file);
+
+    res
+      .status(200)
+      .json(new ApiResponse(200, result, "Document processed successfully"));
+  });
+
+  livenessStart = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      res.status(401).json(new ApiResponse(401, null, "Unauthorized"));
+      return;
+    }
+
+    const sessionId = await userService.LivenessCheckStart();
+    res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          { SessionId: sessionId, status: "success" },
+          "Liveness session started"
+        )
+      );
+  });
+
+  livenessResult = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      res.status(401).json(new ApiResponse(401, null, "Unauthorized"));
+      return;
+    }
+    const sessionId = req.params.id;
+    if (!sessionId) {
+      res
+        .status(400)
+        .json(new ApiResponse(400, null, "Session ID is required"));
+      return;
+    }
+
+    const result = await userService.LivenessCheckResult(sessionId);
+
+    if (!result) {
+      console.log(
+        "[controller] Liveness check result not found for session:",
+        sessionId
+      );
+      res
+        .status(404)
+        .json(new ApiResponse(404, null, "Liveness check result not found"));
+      return;
+    }
+
+    res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          result,
+          "Liveness check result retrieved successfully"
+        )
+      );
+  });
+
+  compareFaces = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file) {
+      res.status(400).json(new ApiResponse(400, null, "No file uploaded"));
+      return;
+    }
+
+    if (!req.user) {
+      res.status(401).json(new ApiResponse(401, null, "Unauthorized"));
+      return;
+    }
+
+    const { livenessImageBytes, s3Bucket, s3Key } = req.body;
+
+    const result = await userService.compareFaces(
+      req.file,
+      livenessImageBytes,
+      s3Bucket,
+      s3Key
+    );
+
+    res
+      .status(200)
+      .json(new ApiResponse(200, result, "Faces compared successfully"));
   });
 }
 

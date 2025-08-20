@@ -14,33 +14,43 @@ const app = express();
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
+    //ngrok
   })
 );
 
 // CORS configuration
 app.use(
   cors({
-    origin: [
-      config.frontend.url,
-      "http://localhost:3000",
-      "http://localhost:3001",
-    ],
+    origin: (origin, callback) => {
+      callback(null, true);
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    allowedHeaders: [
+      "ngrok-skip-browser-warning",
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Access-Control-Allow-Origin",
+      "Access-Control-Allow-Credentials",
+    ],
     exposedHeaders: ["Set-Cookie"],
   })
 );
 
-// Body parsing middleware
+// ngrok header enforcement
+app.use((req, res, next) => {
+  res.setHeader("ngrok-skip-browser-warning", "true");
+  next();
+});
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(cookieParser());
 
 // Logging middleware (only in development)
-if (config.server.nodeEnv === "development") {
-  app.use(morgan("combined"));
-}
+// if (config.server.nodeEnv === "development") {
+//   app.use(morgan("combined"));
+// }
 
 // Request logging middleware
 app.use((req, res, next) => {
