@@ -1,0 +1,452 @@
+import { Request, Response, NextFunction } from "express";
+import { AdminService } from "../services/admin.service";
+import { ApiError } from "../utilities/ApiError";
+import { AML_PEP_Rules, StatusCode, UserRole } from "../config";
+import { ApiResponse } from "../utilities/ApiResponse";
+import { checkCompliance } from "../utilities/ruleEngine";
+import { UserService } from "../services/user.service";
+import { asyncHandler } from "../utilities/AsyncHandler";
+import { profile } from "console";
+import { Status } from "aws-sdk/clients/directconnect";
+
+export class AdminController {
+  private adminService: AdminService;
+  private userService: UserService;
+
+  constructor() {
+    this.adminService = new AdminService();
+    this.userService = new UserService();
+  }
+
+  // User Management Methods (exactly matching your original controller)
+  public async getAllUsers(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const result = await this.adminService.getAllUsers();
+      const _users = result.users
+        .filter((user) => user.role === UserRole.USER)
+        .map((user) => ({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          DOB: user.DOB,
+          "Profile Image": user.profileImage,
+          Verified: user.Verified,
+          "Current Stage": user.currentStage,
+          country: user.country,
+        }));
+
+      res.status(200).json(_users);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public async getUserById(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const userId = req.params.id;
+      const user = await this.adminService.getUserById(userId);
+      if (user) {
+        res.status(200).json(user);
+      } else {
+        res.status(404).json({ message: "User not found" });
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public async updateUser(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const userId = req.params.id;
+      const userData = req.body;
+      const updatedUser = await this.adminService.updateUser(userId, userData);
+      if (updatedUser) {
+        res.status(200).json(updatedUser);
+      } else {
+        res.status(404).json({ message: "User not found" });
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public async deleteUser(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const userId = req.params.id;
+      const success = await this.adminService.deleteUser(userId);
+      if (success) {
+        res.status(204).send(); // No Content
+      } else {
+        res.status(404).json({ message: "User not found" });
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // KYC Session Management Methods
+  public async getAllPendingKYCSessions(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const sessions = await this.adminService.getAllPendingKYCSessions();
+      res.status(200).json(sessions);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public async getKYCSessionsByStatus(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const status = req.params.status as any;
+      const sessions = await this.adminService.getAllKYCSessionsByStatus(
+        status
+      );
+      res.status(200).json(sessions);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public async getKYCSessionById(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const sessionId = req.params.id;
+      const session = await this.adminService.getKYCSessionById(sessionId);
+      if (session) {
+        res.status(200).json(session);
+      } else {
+        res.status(404).json({ message: "KYC Session not found" });
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public async getKYCSessionByUserId(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const userId = req.params.userId;
+      const session = await this.adminService.getKYCSessionByUserId(userId);
+      if (session) {
+        res.status(200).json(session);
+      } else {
+        res
+          .status(404)
+          .json({ message: "KYC Session not found for this user" });
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public async updateKYCSessionStatus(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const sessionId = req.params.id;
+      const { status } = req.body;
+
+      const updatedSession = await this.adminService.updateKYCSessionStatus(
+        sessionId,
+        status
+      );
+
+      if (updatedSession) {
+        res.status(200).json(updatedSession);
+      } else {
+        res.status(404).json({ message: "KYC Session not found" });
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public async getAll_AML_PEP_List(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const list = await this.adminService.getAll_AML_PEP_List();
+
+      res
+        .status(StatusCode.SUCCESS)
+        .json(new ApiResponse(StatusCode.SUCCESS, list));
+    } catch (e: any) {
+      console.log(e.message);
+      next(e);
+      throw new ApiError(StatusCode.INTERNAL_SERVER_ERROR, e.message);
+    }
+  }
+
+  public async getAll_AML_PEP_Rules(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) {
+    res
+      .status(StatusCode.SUCCESS)
+      .json(new ApiResponse(StatusCode.SUCCESS, AML_PEP_Rules));
+  }
+
+  public async insertEntity(req: Request, res: Response) {
+    try {
+      const data = req.body; // expecting an array of JSON objects
+      if (!Array.isArray(data)) {
+        return res
+          .status(400)
+          .json({ message: "Request body must be an array of objects" });
+      }
+
+      const saved = await this.adminService.insertEntities(data);
+      res
+        .status(201)
+        .json({ message: "Data inserted successfully", data: saved });
+    } catch (error: any) {
+      console.error("Insert error:", error);
+      res
+        .status(500)
+        .json({ message: "Failed to insert data", error: error.message });
+    }
+  }
+
+  public async complianceCheck(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        console.log("User ID is required!");
+        throw new ApiError(StatusCode.BAD_REQUEST, "User ID is required!");
+      }
+
+      const user = await this.adminService.getUserById(id);
+
+      if (!user) {
+        console.log("User not found with the given ID!");
+        throw new ApiError(
+          StatusCode.NOT_FOUND,
+          "User not found with the given ID!"
+        );
+      }
+
+      const list = await this.adminService.getAll_AML_PEP_List();
+
+      const compliance_result = checkCompliance(user, list);
+
+      console.log(
+        "\n\n----------------------------------- \nCOMPLIANCE RESULT  \t:\t",
+        compliance_result,
+        "\n-----------------------------------\n"
+      );
+
+      res.status(StatusCode.SUCCESS).json(
+        new ApiResponse(StatusCode.SUCCESS, {
+          compliance: compliance_result,
+          user: user,
+        })
+      );
+    } catch (e: any) {
+      console.log(e.message);
+      throw new ApiError(StatusCode.INTERNAL_SERVER_ERROR, e.message);
+    }
+  }
+
+  // Admin - Complete compliance check
+  completeAdminCheck = asyncHandler(async (req: Request, res: Response) => {
+    const { sessionId } = req.params;
+    const { userId, decision, notes } = req.body;
+
+    // Validate decision
+    if (!["approved", "rejected"].includes(decision)) {
+      res
+        .status(400)
+        .json(
+          new ApiResponse(
+            400,
+            null,
+            "Decision must be either 'approved' or 'rejected'"
+          )
+        );
+      return;
+    }
+
+    if (!userId) {
+      res.status(400).json(new ApiResponse(400, null, "User ID is required"));
+      return;
+    }
+
+    const result = await this.adminService.completeComplianceCheck(
+      userId,
+      sessionId,
+      req.user!.id, // Admin ID
+      decision,
+      notes
+    );
+
+    res
+      .status(200)
+      .json(new ApiResponse(200, result, `KYC ${decision} successfully`));
+  });
+
+  // Admin - Get all pending compliance checks
+  getPendingComplianceChecks = asyncHandler(
+    async (req: Request, res: Response) => {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 10;
+
+      // This would need to be implemented in the service
+      // For now, we can get all users with COMPLIANCE_CHECK stage
+      const result = await this.adminService.getAllUsers(page, limit);
+
+      // Filter users in COMPLIANCE_CHECK stage
+      const pendingUsers = result.users.filter(
+        (user) => user.currentStage === 6
+      ); // COMPLIANCE_CHECK = 6
+
+      res.status(200).json(
+        new ApiResponse(
+          200,
+          {
+            users: pendingUsers,
+            pagination: {
+              page,
+              limit,
+              total: pendingUsers.length,
+              totalPages: Math.ceil(pendingUsers.length / limit),
+            },
+          },
+          "Pending compliance checks retrieved successfully"
+        )
+      );
+    }
+  );
+
+  // Admin - Get KYC analytics/statistics
+  getKYCAnalytics = asyncHandler(async (req: Request, res: Response) => {
+    // This would need more sophisticated queries, but here's a basic implementation
+    const allUsers = await this.adminService.getAllUsers(1, 1000); // Get a large set for analytics
+
+    const analytics = {
+      totalUsers: allUsers.total,
+      verifiedUsers: allUsers.users.filter((user) => user.Verified).length,
+      stageDistribution: {
+        notStarted: allUsers.users.filter((user) => user.currentStage === 0)
+          .length,
+        documentUpload: allUsers.users.filter((user) => user.currentStage === 1)
+          .length,
+        documentProcessing: allUsers.users.filter(
+          (user) => user.currentStage === 2
+        ).length,
+        livenessCheck: allUsers.users.filter((user) => user.currentStage === 3)
+          .length,
+        faceVerification: allUsers.users.filter(
+          (user) => user.currentStage === 4
+        ).length,
+        videoKYC: allUsers.users.filter((user) => user.currentStage === 5)
+          .length,
+        complianceCheck: allUsers.users.filter(
+          (user) => user.currentStage === 6
+        ).length,
+        completed: allUsers.users.filter((user) => user.currentStage === 7)
+          .length,
+        rejected: allUsers.users.filter((user) => user.currentStage === 8)
+          .length,
+      },
+      completionRate: (
+        (allUsers.users.filter((user) => user.currentStage === 7).length /
+          allUsers.total) *
+        100
+      ).toFixed(2),
+      rejectionRate: (
+        (allUsers.users.filter((user) => user.currentStage === 8).length /
+          allUsers.total) *
+        100
+      ).toFixed(2),
+    };
+
+    res
+      .status(200)
+      .json(
+        new ApiResponse(200, analytics, "KYC analytics retrieved successfully")
+      );
+  });
+
+  //----------------------------------------------------------------------------
+
+  getKPIs = asyncHandler(async (req: Request, res: Response) => {
+    // const kpis = await this.adminService.calculateKPIs();
+    const KPIs = {
+      "Total KYCs": "12,450",
+      "Average TAT": "3m 25s",
+      "Rejection Rate": "8.2%",
+      "Face Match Score": "85.6%",
+    };
+
+    res
+      .status(200)
+      .json(new ApiResponse(200, KPIs, "KPI metrics retrieved successfully"));
+  });
+
+  getMatchUnmatch = asyncHandler(async (req: Request, res: Response) => {
+    const match = 60;
+    const unmatch = 40;
+    // const total = match + unmatch;
+    // const matchUnmatch = await this.adminService.getMatchUnmatch();
+    res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          { match, unmatch },
+          "Match-Unmatch face data  retrieved successfully"
+        )
+      );
+  });
+
+  getApprovalRates = asyncHandler(async (req: Request, res: Response) => {
+    const approved = [70, 75, 80, 78, 85, 90, 88];
+    const rejected = [30, 25, 20, 22, 15, 10, 12];
+    const labels = ["10 AM", "11 AM", "12 PM", "1 PM", "2 PM", "3 PM", "4 PM"];
+    res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          { data: { approved, rejected }, labels },
+          "Hourly based data of the day"
+        )
+      );
+  });
+}

@@ -1,3 +1,4 @@
+// User.entity.ts (Updated sections only)
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -6,6 +7,7 @@ import {
   UpdateDateColumn,
   BeforeInsert,
   BeforeUpdate,
+  OneToMany,
 } from "typeorm";
 import {
   IsEmail,
@@ -16,7 +18,9 @@ import {
   IsEnum,
 } from "class-validator";
 import bcrypt from "bcrypt";
-import { UserRole } from "../config";
+import { KYCStage, UserRole } from "../config";
+import { UserKYCSession } from "./UserKYCSession.entity";
+import { UserChat } from "./UserChat.entity"; // ✅ Import the new entity
 
 @Entity("users")
 export class User {
@@ -43,21 +47,49 @@ export class User {
   @IsPhoneNumber("IN", { message: "Please provide a valid phone number" })
   phone?: string;
 
+  @Column({ type: "date", nullable: true })
+  @IsOptional()
+  DOB?: Date;
+
+  @Column({ type: "varchar", nullable: true })
+  @IsOptional()
+  country?: string;
+
   @Column({
     type: "enum",
     enum: UserRole,
     default: UserRole.USER,
   })
-  @IsEnum(UserRole, { message: "Role must be either admin or user" })
+  @IsEnum(UserRole, { message: "Role must be either admin, agent or user" })
   role!: UserRole;
 
   @Column({ type: "varchar", length: 500, nullable: true })
   profileImage?: string;
 
+  @Column({
+    type: "enum",
+    enum: KYCStage,
+    default: KYCStage.NOT_STARTED,
+  })
+  currentStage!: KYCStage;
+
+  @Column({ type: "boolean", default: false })
+  Verified!: boolean;
+
+  // Relationships
+  @OneToMany(() => UserKYCSession, (session) => session.user)
+  KYCSessions!: UserKYCSession[];
+
+  @OneToMany(() => UserChat, (chat) => chat.user)
+  chats!: UserChat[];
+
+  @Column({ type: "timestamp", nullable: true })
+  lastChatAt?: Date;
+
   @Column({ type: "boolean", default: true })
   isActive!: boolean;
 
-  @Column({ type: "varchar", length: 500, nullable: true })
+  @Column({ type: "varchar", length: 500, nullable: true, select: false })
   refreshToken?: string;
 
   @CreateDateColumn()
@@ -66,6 +98,85 @@ export class User {
   @UpdateDateColumn()
   updatedAt!: Date;
 
+  get uploadedDocuments(): number {
+    return this.KYCSessions?.length || 0;
+  }
+
+  get successfulUploads(): number {
+    return (
+      this.KYCSessions?.filter(
+        (session) =>
+          session.status === "completed" || session.status === "verified"
+      ).length || 0
+    );
+  }
+
+  get failedUploads(): number {
+    return (
+      this.KYCSessions?.filter(
+        (session) =>
+          session.status === "failed" || session.status === "rejected"
+      ).length || 0
+    );
+  }
+
+  // STAGE MANAGEMENT METHODS
+  advanceStage() {
+    if (this.currentStage < KYCStage.COMPLETED) {
+      this.currentStage = this.currentStage + 1;
+      this.lastChatAt = new Date();
+    }
+  }
+
+  updateKYCStage(stage: KYCStage) {
+    this.currentStage = stage;
+    this.lastChatAt = new Date();
+  }
+
+  getStageProgress(): number {
+    // Calculate progress percentage based on stage
+    const totalStages = Object.keys(KYCStage).length / 2; // Enum has both string and number keys
+    return Math.round((this.currentStage / (totalStages - 1)) * 100);
+  }
+
+  canProceedToStage(targetStage: KYCStage): boolean {
+    const stageOrder = [
+      KYCStage.NOT_STARTED,
+      KYCStage.DOCUMENT_UPLOAD,
+      KYCStage.DOCUMENT_PROCESSING,
+      KYCStage.LIVENESS_CHECK,
+      KYCStage.FACE_VERIFICATION,
+      KYCStage.VIDEO_KYC,
+      KYCStage.COMPLIANCE_CHECK,
+      KYCStage.COMPLETED,
+    ];
+
+    const currentIndex = stageOrder.indexOf(this.currentStage);
+    const targetIndex = stageOrder.indexOf(targetStage);
+
+    return targetIndex <= currentIndex + 1; // Can only advance by 1 step or stay same
+  }
+
+  // Get user's most recent chat
+  get activeChat(): UserChat | undefined {
+    return (
+      this.chats?.find((chat) => chat.getMessageCount() > 0) || this.chats?.[0]
+    );
+  }
+  get activeKYCSesson() {
+    if (!this.KYCSessions || this.KYCSessions.length === 0) return null;
+
+    const active = this.KYCSessions.find((s) => s.status === "pending");
+
+    return (
+      active ||
+      this.KYCSessions.sort(
+        (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+      )[0]
+    );
+  }
+
+  // Password handling
   @BeforeInsert()
   @BeforeUpdate()
   async hashPassword(): Promise<void> {
@@ -79,9 +190,48 @@ export class User {
     return bcrypt.compare(candidatePassword, this.password);
   }
 
-  // Remove sensitive data when converting to JSON
+  // ✅ Updated toJSON method
   toJSON() {
-    const { password, refreshToken, ...publicData } = this;
-    return publicData;
+    const {
+      password,
+      refreshToken,
+      createdAt,
+      updatedAt,
+      lastChatAt,
+      isActive,
+      ...publicData
+    } = this;
+
+    return {
+      ...publicData,
+
+      uploads: {
+        total: this.uploadedDocuments,
+        success: this.successfulUploads,
+        failure: this.failedUploads,
+      },
+      // chatSummary: {
+      //   totalChats: this.chats?.length || 0,
+      //   totalMessages:
+      //     this.chats?.reduce(
+      //       (total, chat) => total + chat.getMessageCount(),
+      //       0
+      //     ) || 0,
+      //   lastChatAt: this.lastChatAt,
+      // },
+      KYCSessions:
+        this.KYCSessions?.filter(
+          (session) => session.EPIC1 !== null || session.EPIC2 !== null
+        )
+          ?.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+          ?.map((session) => ({
+            id: session.id,
+            session_status: session.status,
+            fileURL: session.fileURL,
+            EPIC1: session.EPIC1,
+            EPIC2: session.EPIC2,
+            createdAt: session.createdAt,
+          })) || [],
+    };
   }
 }

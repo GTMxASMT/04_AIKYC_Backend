@@ -21,7 +21,7 @@ export const errorHandler = (
   if (config.server.nodeEnv === "development") {
     console.error("🚨 Error:", {
       message: error.message,
-      stack: error.stack,
+      // stack: error.stack,
       url: req.url,
       method: req.method,
     });

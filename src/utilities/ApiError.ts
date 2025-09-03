@@ -16,10 +16,10 @@ export class ApiError extends Error {
     this.errors = errors;
     this.data = null;
 
-    if (stack) {
-      this.stack = stack;
-    } else {
-      Error.captureStackTrace(this, this.constructor);
-    }
+    // if (stack) {
+    //   this.stack = stack;
+    // } else {
+    //   Error.captureStackTrace(this, this.constructor);
+    // }
   }
 }

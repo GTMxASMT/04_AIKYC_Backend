@@ -20,6 +20,12 @@ export class CreateUserDTO {
   @Length(6, 255, { message: "Password must be at least 6 characters long" })
   password!: string;
 
+  @IsOptional({ message: "Captcha token is required" })
+  gretoken!: string;
+
+  @IsOptional({ message: "gtm property token is required" })
+  gtm!: boolean;
+
   @IsOptional()
   @IsPhoneNumber("IN", { message: "Please provide a valid phone number" })
   phone?: string;
@@ -46,6 +52,12 @@ export class LoginDTO {
 
   @IsNotEmpty({ message: "Password is required" })
   password!: string;
+
+  @IsOptional({ message: "gretoken is required" })
+  gretoken!: string;
+
+  @IsOptional()
+  gtm!: boolean;
 }
 
 export class RefreshTokenDTO {

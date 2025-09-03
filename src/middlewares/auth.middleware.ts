@@ -24,23 +24,14 @@ declare global {
 
 export const authenticate = asyncHandler(
   async (req: Request, res: Response, next: NextFunction) => {
-    let token = req.header("Authorization")?.replace("Bearer ", "");
+    let token =
+      req.header("Authorization")?.replace("Bearer ", "") ||
+      req.cookies?.accessToken;
 
     // Also check cookies if no header token
     if (!token && req.cookies?.accessToken) {
       token = req.cookies.accessToken;
     }
-
-    // Enhanced logging for debugging
-    console.log("Authentication attempt:", {
-      hasAuthHeader: !!req.header("Authorization"),
-      hasCookie: !!req.cookies?.accessToken,
-      tokenFound: !!token,
-      tokenPrefix: token ? token.substring(0, 10) + "..." : "none",
-      endpoint: req.path,
-      method: req.method,
-    });
-
     if (!token) {
       throw new ApiError(401, "Access denied. No token provided.");
     }
@@ -75,6 +66,12 @@ export const authenticate = asyncHandler(
       }
 
       req.user = user;
+      console.log("User authenticated successfully:", {
+        userId: user.id,
+        userEmail: user.email,
+        userRole: user.role,
+      });
+
       next();
     } catch (error) {
       console.error("Authentication error:", {
