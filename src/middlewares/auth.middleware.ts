@@ -32,6 +32,7 @@ export const authenticate = asyncHandler(
     if (!token && req.cookies?.accessToken) {
       token = req.cookies.accessToken;
     }
+
     if (!token) {
       throw new ApiError(401, "Access denied. No token provided.");
     }
@@ -39,6 +40,9 @@ export const authenticate = asyncHandler(
     try {
       const decoded = jwt.verify(token, config.jwt.accessSecret) as JwtPayload;
 
+      if (!decoded || !decoded.id) {
+        throw new ApiError(401, "Invalid token. Authentication failed.");
+      }
       // Check token expiration manually for better error handling
       if (decoded.exp && Date.now() >= decoded.exp * 1000) {
         throw new ApiError(401, "Token expired. Please refresh your token.");

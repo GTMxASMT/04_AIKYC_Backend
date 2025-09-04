@@ -4,7 +4,7 @@ import { XWebRTCService } from "../services/Xwebrtc.service";
 import { ApiResponse } from "../utilities/ApiResponse";
 import { ApiError } from "../utilities/ApiError";
 import { asyncHandler } from "../utilities/AsyncHandler";
-import { UserRole } from "../config";
+import { StatusCode, UserRole } from "../config";
 
 export class XWebRTCController {
   private webrtcService: XWebRTCService;
@@ -13,9 +13,45 @@ export class XWebRTCController {
     this.webrtcService = new XWebRTCService();
   }
 
+  getVideoKYCUsers = asyncHandler(async (req: Request, res: Response) => {
+    const users = await this.webrtcService.getVideoKYCUsers();
+
+    return res
+      .status(StatusCode.SUCCESS)
+      .json(
+        new ApiResponse(
+          StatusCode.SUCCESS,
+          users,
+          "Video KYC users retrieved successfully"
+        )
+      );
+  });
+
+  selectVideoKYCUser = asyncHandler(async (req: Request, res: Response) => {
+    const { userId } = req.params;
+
+    if (!userId) {
+      throw new ApiError(400, "User ID is required");
+    }
+
+    const result = await this.webrtcService.selectVideoKYCUser(userId);
+
+    return res
+      .status(StatusCode.SUCCESS)
+      .json(
+        new ApiResponse(
+          StatusCode.SUCCESS,
+          result,
+          "Video KYC user selected successfully"
+        )
+      );
+  });
+
+  // Send email to user with instructions
+
   // Only AGENT or ADMIN can create sessions
   createSession = asyncHandler(async (req: Request, res: Response) => {
-    const { targetUserId } = req.body;
+    const { targetUserId, sessionId } = req.body;
     const agentId = req.user?.id;
     const agentRole = req.user?.role;
 
@@ -32,10 +68,15 @@ export class XWebRTCController {
       throw new ApiError(400, "Target user ID is required for KYC session");
     }
 
+    console.log("[controller] Creating session for agent:", agentId);
+    console.log("[controller] Target user ID:", targetUserId);
+    console.log("[controller] Provided session ID:", sessionId);
     const sessionData = await this.webrtcService.createSession(
       agentId,
-      targetUserId
+      targetUserId,
+      sessionId
     );
+    console.log("[controller] Session created:", sessionData);
 
     return res
       .status(201)

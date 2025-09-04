@@ -47,7 +47,7 @@ export class VideoSession {
       name: string;
       email: string;
       role: string;
-      joinedAt: Date;
+      joinedAt?: Date;
     }>;
     lastUpdated?: Date;
     recording?: {
@@ -152,7 +152,7 @@ export class VideoSession {
     name: string;
     email: string;
     role: string;
-    joinedAt: Date;
+    joinedAt?: Date;
   }): void {
     if (!this.metadata.participants) {
       this.metadata.participants = [];

@@ -1,8 +1,8 @@
-// socket.manager.ts
+// XSocket.manager.ts
 import { Server as HTTPServer } from "http";
 import { Server as SocketIOServer, Socket } from "socket.io";
 import jwt from "jsonwebtoken";
-import { config, UserRole } from "../config";
+import { config } from "../config";
 import { XWebRTCService } from "./Xwebrtc.service";
 import { AppDataSource } from "../database/db";
 import { User } from "../entities/User.entity";
@@ -52,6 +52,7 @@ export class XSocketManager {
         methods: ["GET", "POST"],
       },
       allowEIO3: true,
+
       pingTimeout: 60000,
       pingInterval: 25000,
       transports: ["websocket", "polling"],
@@ -74,10 +75,13 @@ export class XSocketManager {
         await this.handleAuthentication(socket, data);
       });
 
-      // Handle joining session - improved with better validation
-      socket.on("join-session", async (data: { sessionId: string }) => {
-        await this.handleJoinSession(socket, data);
-      });
+      // Handle joining session
+      socket.on(
+        "join-session",
+        async (data: { sessionId: string; user: any }) => {
+          await this.handleJoinSession(socket, data);
+        }
+      );
 
       // Handle leaving session
       socket.on("leave-session", async (data: { sessionId: string }) => {
@@ -150,15 +154,6 @@ export class XSocketManager {
       socket.userId = user.id;
       socket.user = user;
 
-      // Remove any existing socket for this user (prevent multiple connections)
-      const existingSocket = this.connectedUsers.get(user.id);
-      if (existingSocket && existingSocket.id !== socket.id) {
-        existingSocket.emit("connection-replaced", {
-          message: "Your connection has been replaced by a new session",
-        });
-        existingSocket.disconnect();
-      }
-
       // Store socket in connected users map
       this.connectedUsers.set(user.id, socket);
 
@@ -186,36 +181,21 @@ export class XSocketManager {
 
   private async handleJoinSession(
     socket: AuthenticatedSocket,
-    data: { sessionId: string }
+    data: { sessionId: string; user: any }
   ): Promise<void> {
     try {
-      const { sessionId } = data;
+      const { sessionId, user } = data;
 
       if (!sessionId) {
         socket.emit("error", { message: "Session ID required" });
         return;
       }
 
-      if (!socket.user) {
-        socket.emit("error", { message: "Authentication required" });
-        return;
-      }
+      // Use provided user data or socket's authenticated user
+      const userInfo = user || socket.user;
 
-      // Validate session exists and user can join
-      const session = await this.webrtcService.getSession(sessionId);
-      if (!session) {
-        socket.emit("error", { message: "Session not found or not active" });
-        return;
-      }
-
-      // Additional validation for user role
-      if (
-        socket.user.role === UserRole.USER &&
-        session.targetUserId !== socket.user.id
-      ) {
-        socket.emit("error", {
-          message: "You are not authorized to join this KYC session",
-        });
+      if (!userInfo) {
+        socket.emit("error", { message: "User information required" });
         return;
       }
 
@@ -231,51 +211,35 @@ export class XSocketManager {
 
       // Join session in service
       const result = await this.webrtcService.joinSession(sessionId, {
-        userId: socket.user.id,
-        name: socket.user.name,
-        email: socket.user.email,
-        role: socket.user.role,
+        userId: userInfo.userId || userInfo.id,
+        name: userInfo.name,
+        email: userInfo.email,
+        role: userInfo.role,
       });
 
-      console.log(`User ${socket.user.name} joined session ${sessionId}`);
+      console.log(`User ${userInfo.name} joined session ${sessionId}`);
 
       // Notify the user who joined
       socket.emit("session-joined", {
         sessionId,
         participants: result.session.participants,
-        message: result.message,
-        sessionInfo: {
-          status: result.session.status,
-          createdAt: result.session.createdAt,
-          targetUserId: result.session.targetUserId,
-          kycSessionId: result.session.kycSessionId,
-        },
       });
 
       // Notify others in the room
       socket.to(sessionId).emit("user-joined", {
-        userId: socket.user.id,
-        name: socket.user.name,
-        email: socket.user.email,
-        role: socket.user.role,
-        joinedAt: result.participant.joinedAt,
+        userId: userInfo.userId || userInfo.id,
+        name: userInfo.name,
+        email: userInfo.email,
+        role: userInfo.role,
       });
 
       // Emit onUserJoined event for frontend compatibility
       socket.to(sessionId).emit("onUserJoined", {
-        userId: socket.user.id,
-        name: socket.user.name,
-        email: socket.user.email,
-        role: socket.user.role,
+        userId: userInfo.userId || userInfo.id,
+        name: userInfo.name,
+        email: userInfo.email,
+        role: userInfo.role,
       });
-
-      // If both participants are now present, emit ready event
-      if (result.session.participants.length === 2) {
-        this.io.to(sessionId).emit("session-ready", {
-          message: "Both participants joined - session ready to begin",
-          participants: result.session.participants,
-        });
-      }
     } catch (error) {
       console.error("Join session error:", error);
       socket.emit("error", {
@@ -309,37 +273,15 @@ export class XSocketManager {
       }
 
       // Leave session in service
-      const result = await this.webrtcService.leaveSession(
-        sessionId,
-        socket.userId
-      );
+      await this.webrtcService.leaveSession(sessionId, socket.userId);
 
       // Notify others in the room
-      socket.to(sessionId).emit("user-left", {
-        userId: socket.userId,
-        message: result.message,
-        sessionStatus: result.sessionStatus,
-      });
-
+      socket.to(sessionId).emit("user-left", socket.userId);
       socket.to(sessionId).emit("onUserLeft", socket.userId);
-
-      // Clear session ID from socket
-      socket.sessionId = undefined;
-
-      // Notify the leaving user
-      socket.emit("session-left", {
-        sessionId,
-        message: result.message,
-        sessionStatus: result.sessionStatus,
-      });
 
       console.log(`User ${socket.userId} left session ${sessionId}`);
     } catch (error) {
       console.error("Leave session error:", error);
-      socket.emit("error", {
-        message:
-          error instanceof Error ? error.message : "Failed to leave session",
-      });
     }
   }
 
@@ -355,22 +297,13 @@ export class XSocketManager {
         return;
       }
 
-      if (!socket.userId) {
-        socket.emit("error", { message: "User not authenticated" });
-        return;
-      }
-
       // Forward signal to target user or broadcast to room
       if (signal.targetUserId) {
         const targetSocket = this.connectedUsers.get(signal.targetUserId);
-        if (targetSocket && targetSocket.sessionId === sessionId) {
+        if (targetSocket) {
           targetSocket.emit("webrtc-signal", {
             ...signal,
             fromUserId: socket.userId,
-          });
-        } else {
-          socket.emit("error", {
-            message: "Target user not found or not in the same session",
           });
         }
       } else {
@@ -400,17 +333,6 @@ export class XSocketManager {
         return;
       }
 
-      // Verify user is agent/admin
-      if (
-        socket.user?.role !== UserRole.AGENT &&
-        socket.user?.role !== UserRole.ADMIN
-      ) {
-        socket.emit("error", {
-          message: "Only agents or admins can submit verification",
-        });
-        return;
-      }
-
       // Submit verification through service
       const result = await this.webrtcService.submitVerification(
         sessionId,
@@ -419,36 +341,10 @@ export class XSocketManager {
       );
 
       // Notify all participants in the session
-      this.io.to(sessionId).emit("verification-completed", {
-        ...result,
-        submittedBy: {
-          userId: socket.userId,
-          name: socket.user.name,
-          role: socket.user.role,
-        },
-        timestamp: new Date().toISOString(),
-      });
+      this.io.to(sessionId).emit("verification-completed", result);
+      this.io.to(sessionId).emit("onVerificationCompleted", { checklist });
 
-      this.io.to(sessionId).emit("onVerificationCompleted", {
-        checklist,
-        status,
-        notes,
-        submittedBy: socket.user.name,
-      });
-
-      console.log(
-        `Verification completed for session ${sessionId} by ${socket.user.name}`
-      );
-
-      // If session is completed, notify about closure
-      if (status === "approved" || status === "rejected") {
-        setTimeout(() => {
-          this.io.to(sessionId).emit("session-completed", {
-            message: "KYC session completed. You may now leave.",
-            finalStatus: status,
-          });
-        }, 2000);
-      }
+      console.log(`Verification completed for session ${sessionId}`);
     } catch (error) {
       console.error("Verification error:", error);
       socket.emit("error", {
@@ -472,26 +368,14 @@ export class XSocketManager {
         return;
       }
 
-      if (
-        socket.user?.role !== UserRole.AGENT &&
-        socket.user?.role !== UserRole.ADMIN
-      ) {
-        socket.emit("error", {
-          message: "Only agents or admins can control recording",
-        });
-        return;
-      }
-
       // Broadcast recording status to all participants in the session
       this.io.to(sessionId).emit("recording-status-changed", {
         isRecording,
         userId: socket.userId,
-        userName: socket.user?.name,
-        timestamp: new Date().toISOString(),
       });
 
       console.log(
-        `Recording status changed for session ${sessionId}: ${isRecording} by ${socket.user?.name}`
+        `Recording status changed for session ${sessionId}: ${isRecording}`
       );
     } catch (error) {
       console.error("Recording status error:", error);
@@ -504,17 +388,12 @@ export class XSocketManager {
 
     // Remove from connected users
     if (socket.userId) {
-      const storedSocket = this.connectedUsers.get(socket.userId);
-      if (storedSocket && storedSocket.id === socket.id) {
-        this.connectedUsers.delete(socket.userId);
-      }
+      this.connectedUsers.delete(socket.userId);
 
       // Leave any sessions
       if (socket.sessionId) {
         this.handleLeaveSession(socket, { sessionId: socket.sessionId }).catch(
-          (error) => {
-            console.error("Error leaving session on disconnect:", error);
-          }
+          console.error
         );
       }
     }
@@ -529,23 +408,15 @@ export class XSocketManager {
 
         // Notify others in the session
         if (socket.userId) {
-          socket.to(sessionId).emit("user-disconnected", {
-            userId: socket.userId,
-            message: "User disconnected unexpectedly",
-          });
+          socket.to(sessionId).emit("user-left", socket.userId);
           socket.to(sessionId).emit("onUserLeft", socket.userId);
         }
       }
     }
   }
 
-  // Public methods for external use
   public getActiveConnections(): number {
     return this.connectedUsers.size;
-  }
-
-  public getSessionRooms(): Map<string, Set<string>> {
-    return new Map(this.sessionRooms);
   }
 
   public getServerHealth(): any {
@@ -555,41 +426,6 @@ export class XSocketManager {
       activeSessions: this.sessionRooms.size,
       timestamp: new Date().toISOString(),
     };
-  }
-
-  // Force disconnect a user (admin functionality)
-  public forceDisconnectUser(userId: string, reason?: string): boolean {
-    const socket = this.connectedUsers.get(userId);
-    if (socket) {
-      socket.emit("forced-disconnect", {
-        message: reason || "You have been disconnected by an administrator",
-      });
-      socket.disconnect(true);
-      return true;
-    }
-    return false;
-  }
-
-  // Broadcast message to a specific session
-  public broadcastToSession(sessionId: string, event: string, data: any): void {
-    this.io.to(sessionId).emit(event, data);
-  }
-
-  // Get participants in a session room
-  public getSessionParticipants(sessionId: string): string[] {
-    const socketIds = this.sessionRooms.get(sessionId);
-    if (!socketIds) return [];
-
-    const participants: string[] = [];
-    for (const socketId of socketIds) {
-      const socket = this.io.sockets.sockets.get(
-        socketId
-      ) as AuthenticatedSocket;
-      if (socket?.userId) {
-        participants.push(socket.userId);
-      }
-    }
-    return participants;
   }
 
   public async gracefulShutdown(): Promise<void> {

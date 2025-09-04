@@ -42,6 +42,8 @@ router.get(
   adminController.getApprovalRates.bind(adminController)
 );
 
+router.get("/reports", adminController.getReports.bind(adminController));
+
 // ----------------------------------------------------------------------------------
 
 router.use(authenticate, authorize(UserRole.ADMIN));

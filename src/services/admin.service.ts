@@ -1,4 +1,4 @@
-import { Repository } from "typeorm";
+import { Between, LessThanOrEqual, MoreThanOrEqual, Repository } from "typeorm";
 import { User } from "../entities/User.entity";
 import { UserKYCSession } from "../entities/UserKYCSession.entity";
 import { AppDataSource } from "../database/db";
@@ -43,6 +43,31 @@ export class AdminService {
       total,
       totalPages: Math.ceil(total / limit),
     };
+  }
+
+  async getAllUsersByFilter(
+    from?: Date,
+    to?: Date
+  ): Promise<{ data: User[]; labels: string[] }> {
+    const where: any = { isActive: true };
+    if (from && to) {
+      where.createdAt = Between(from, to);
+    } else if (from) {
+      where.createdAt = MoreThanOrEqual(from);
+    } else if (to) {
+      where.createdAt = LessThanOrEqual(to);
+    }
+    const filteredData = await this.userRepository.find({
+      where,
+      relations: ["KYCSessions"],
+      order: { createdAt: "DESC" },
+    });
+
+    const createdAtLabels = filteredData
+      .map((user) => user.createdAt.toISOString().split("T")[0])
+      .sort();
+
+    return { data: filteredData, labels: createdAtLabels };
   }
 
   async getUserById(userId: string): Promise<User | null> {
@@ -97,6 +122,13 @@ export class AdminService {
   }
 
   // KYC Session Methods (based on your existing methods)
+  async getAllKYCSessions(): Promise<UserKYCSession[]> {
+    return this.KYCSessionRepository.find({
+      where: {},
+      relations: ["user"],
+      order: { createdAt: "DESC" },
+    });
+  }
   async getAllPendingKYCSessions(): Promise<UserKYCSession[]> {
     return this.KYCSessionRepository.find({
       where: { status: Status.PENDING },
@@ -111,6 +143,33 @@ export class AdminService {
       relations: ["user"],
       order: { createdAt: "DESC" },
     });
+  }
+
+  async getAllKYCSessionsByFilters(
+    from?: Date,
+    to?: Date
+  ): Promise<{ data: UserKYCSession[]; labels: string[] }> {
+    const where: any = {};
+
+    if (from && to) {
+      where.createdAt = Between(from, to);
+    } else if (from) {
+      where.createdAt = MoreThanOrEqual(from);
+    } else if (to) {
+      where.createdAt = LessThanOrEqual(to);
+    }
+
+    const filteredData = await this.KYCSessionRepository.find({
+      where,
+      relations: ["user"],
+      order: { createdAt: "DESC" },
+    });
+
+    const createdAtLabels = filteredData
+      .map((user) => user.createdAt.toISOString().split("T")[0])
+      .sort();
+
+    return { data: filteredData, labels: createdAtLabels };
   }
 
   async getKYCSessionById(sessionId: string): Promise<UserKYCSession | null> {

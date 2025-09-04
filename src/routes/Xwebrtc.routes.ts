@@ -8,6 +8,18 @@ const router = Router();
 const webrtcController = new XWebRTCController();
 
 // Session management routes
+
+router.get(
+  "/get-video-kyc-users",
+  authenticate,
+  webrtcController.getVideoKYCUsers
+);
+router.post(
+  "/select-video-kyc-user/:userId",
+  authenticate,
+  webrtcController.selectVideoKYCUser
+);
+
 router.post(
   "/sessions",
   authenticate,

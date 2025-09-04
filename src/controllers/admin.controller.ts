@@ -1,13 +1,12 @@
 import { Request, Response, NextFunction } from "express";
 import { AdminService } from "../services/admin.service";
 import { ApiError } from "../utilities/ApiError";
-import { AML_PEP_Rules, StatusCode, UserRole } from "../config";
+import { AML_PEP_Rules, Status, StatusCode, UserRole } from "../config";
 import { ApiResponse } from "../utilities/ApiResponse";
 import { checkCompliance } from "../utilities/ruleEngine";
 import { UserService } from "../services/user.service";
 import { asyncHandler } from "../utilities/AsyncHandler";
 import { profile } from "console";
-import { Status } from "aws-sdk/clients/directconnect";
 
 export class AdminController {
   private adminService: AdminService;
@@ -407,8 +406,12 @@ export class AdminController {
 
   getKPIs = asyncHandler(async (req: Request, res: Response) => {
     // const kpis = await this.adminService.calculateKPIs();
+    const totalKYCs = await this.adminService.getAllKYCSessionsByStatus(
+      Status.COMPLETED
+    );
+
     const KPIs = {
-      "Total KYCs": "12,450",
+      "Total KYCs": totalKYCs.length,
       "Average TAT": "3m 25s",
       "Rejection Rate": "8.2%",
       "Face Match Score": "85.6%",
@@ -448,5 +451,75 @@ export class AdminController {
           "Hourly based data of the day"
         )
       );
+  });
+
+  getReports = asyncHandler(async (req: Request, res: Response) => {
+    const { from, to, type, dataSource } = req.query;
+
+    console.log("Report request params:", { from, to, type, dataSource });
+    console.log("Type of 'from':", typeof from);
+    console.log("Type of 'to':", typeof to);
+
+    // Validate date range
+    if (!from || !to) {
+      res
+        .status(400)
+        .json(new ApiResponse(400, null, "'from' and 'to' dates are required"));
+      return;
+    }
+
+    const fromDate = from ? new Date(from as string) : undefined;
+    const toDate = to ? new Date(to as string) : undefined;
+
+    // Validate type
+    const validTypes = ["tabular", "chart"];
+    if (type && !validTypes.includes(type as string)) {
+      res
+        .status(400)
+        .json(
+          new ApiResponse(400, null, `Invalid type. Valid types: ${validTypes}`)
+        );
+      return;
+    }
+
+    // Validate dataSource
+    const validDataSources = ["KYC Records", "Users", "Audit Logs"];
+    if (dataSource && !validDataSources.includes(dataSource as string)) {
+      res
+        .status(400)
+        .json(
+          new ApiResponse(
+            400,
+            null,
+            `Invalid dataSource. Valid options: ${validDataSources}`
+          )
+        );
+      return;
+    }
+
+    let res_data: { data: any[]; labels: any[] } = { data: [], labels: [] };
+    if (dataSource === "KYC Records") {
+      res_data = await this.adminService.getAllKYCSessionsByFilters(
+        fromDate,
+        toDate
+      );
+    } else if (dataSource === "Users") {
+      res_data = await this.adminService.getAllUsersByFilter(fromDate, toDate);
+    } else if (dataSource === "Audit Logs") {
+      res_data = { data: [], labels: [] };
+    }
+
+    res.status(StatusCode.SUCCESS).json(
+      new ApiResponse(
+        StatusCode.SUCCESS,
+        {
+          data: res_data.data,
+          labels: type === "chart" ? res_data.labels : "",
+          type,
+          source: dataSource,
+        },
+        "Report data retrieved successfully"
+      )
+    );
   });
 }
