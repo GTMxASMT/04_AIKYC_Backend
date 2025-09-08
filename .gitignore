@@ -1,0 +1,11 @@
+node_modules
+.git
+.DS_Store
+.env
+.idea
+.vscode
+*.log
+note.tsxt
+note.txt
+/src/config.ts
+/dist
