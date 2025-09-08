@@ -111,6 +111,16 @@ export class XSocketManager {
         socket.emit("pong", { timestamp: new Date().toISOString() });
       });
 
+      // socket.on("user:message", ({ message, to }) => {
+      //   console.log("msg", message, to, "Socket ID:", socket.id);
+      //   socket.to(to).emit("user:message", { message });
+      // });
+
+      // socket.on("agent:message", ({ message, to }) => {
+      //   console.log("msg", message, to, "Socket ID:", socket.id);
+      //   socket.to(to).emit("agent:message", { message });
+      // });
+
       // Handle disconnection
       socket.on("disconnect", () => {
         this.handleDisconnect(socket);

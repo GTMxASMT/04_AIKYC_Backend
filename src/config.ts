@@ -53,6 +53,8 @@ export const config = {
   },
 };
 
+export const FRONTEND_URL = config.frontend.url;
+
 export const AML_PEP_Rules = [
   {
     id: "R1",
@@ -141,8 +143,9 @@ export enum KYCStage {
   FACE_VERIFICATION = 4,
   VIDEO_KYC = 5,
   COMPLIANCE_CHECK = 6,
-  COMPLETED = 7,
+  APPROVED = 7,
   REJECTED = 8,
+  FLAGGED = 9,
 }
 
 export enum Status {

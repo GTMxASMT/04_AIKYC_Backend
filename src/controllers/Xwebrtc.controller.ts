@@ -51,10 +51,11 @@ export class XWebRTCController {
 
   // Only AGENT or ADMIN can create sessions
   createSession = asyncHandler(async (req: Request, res: Response) => {
-    const { targetUserId, sessionId } = req.body;
+    const { targetUserId, sessionId, metadata } = req.body;
     const agentId = req.user?.id;
     const agentRole = req.user?.role;
 
+    console.log("Metadata received:", metadata);
     if (!agentId) {
       throw new ApiError(401, "Unauthorized - Agent authentication required");
     }
@@ -68,9 +69,6 @@ export class XWebRTCController {
       throw new ApiError(400, "Target user ID is required for KYC session");
     }
 
-    console.log("[controller] Creating session for agent:", agentId);
-    console.log("[controller] Target user ID:", targetUserId);
-    console.log("[controller] Provided session ID:", sessionId);
     const sessionData = await this.webrtcService.createSession(
       agentId,
       targetUserId,
@@ -115,8 +113,10 @@ export class XWebRTCController {
 
   // Users join existing sessions
   joinSession = asyncHandler(async (req: Request, res: Response) => {
-    const { sessionId } = req.params;
+    const { sessionId, metadata } = req.params;
     const user = req.user!;
+
+    console.log("Metadata on join:", metadata);
 
     // Validate user role
     if (![UserRole.USER, UserRole.AGENT, UserRole.ADMIN].includes(user.role)) {
@@ -152,7 +152,7 @@ export class XWebRTCController {
 
   submitVerification = asyncHandler(async (req: Request, res: Response) => {
     const { sessionId } = req.params;
-    const { checklist, status, notes } = req.body;
+    const { checklist, status, notes, ipAddress, geoLocation, time } = req.body;
     const agentId = req.user?.id;
     const agentRole = req.user?.role;
 
@@ -188,10 +188,11 @@ export class XWebRTCController {
       );
     }
 
+    console.log({ checklist, status, notes, ipAddress, geoLocation, time });
     const result = await this.webrtcService.submitVerification(
       sessionId,
       agentId,
-      { checklist, status, notes }
+      { checklist, status, notes, ipAddress, geoLocation, time }
     );
 
     return res

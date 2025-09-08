@@ -19,7 +19,7 @@ export const errorHandler = (
 
   // Log error in development
   if (config.server.nodeEnv === "development") {
-    console.error("🚨 Error:", {
+    console.error(" Error:", {
       message: error.message,
       // stack: error.stack,
       url: req.url,
@@ -41,7 +41,7 @@ export const errorHandler = (
 // Handle unhandled promise rejections
 export const handleUnhandledRejection = () => {
   process.on("unhandledRejection", (err: Error) => {
-    console.error("🚨 Unhandled Promise Rejection:", err);
+    console.error(" Unhandled Promise Rejection:", err);
     process.exit(1);
   });
 };
@@ -49,7 +49,7 @@ export const handleUnhandledRejection = () => {
 // Handle uncaught exceptions
 export const handleUncaughtException = () => {
   process.on("uncaughtException", (err: Error) => {
-    console.error("🚨 Uncaught Exception:", err);
+    console.error("Uncaught Exception:", err);
     process.exit(1);
   });
 };

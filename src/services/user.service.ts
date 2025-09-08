@@ -1067,7 +1067,7 @@ export class UserService {
         steps.push("You will be notified of the result");
         break;
 
-      case KYCStage.COMPLETED:
+      case KYCStage.APPROVED:
         steps.push("KYC verification completed successfully!");
         break;
 

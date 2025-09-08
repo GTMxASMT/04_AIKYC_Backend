@@ -2,7 +2,7 @@ import { IsEnum, IsNotEmpty, IsOptional } from "class-validator";
 import { Entity, Column, PrimaryColumn } from "typeorm";
 
 @Entity({ name: "aml_pep_rules" })
-export class Compilance {
+export class Compliance {
   @PrimaryColumn("uuid")
   id!: string;
 

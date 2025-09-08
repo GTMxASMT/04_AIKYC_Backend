@@ -4,7 +4,8 @@ import { User } from "../entities/User.entity";
 import { UserKYCSession } from "../entities/UserKYCSession.entity";
 import { UserChat } from "../entities/UserChat.entity";
 import { VideoSession } from "../entities/VideoSession.entity";
-import { Compilance } from "../entities/Compilance.entity";
+import { Compliance } from "../entities/Compilance.entity";
+import { KYCDocumentsConfig } from "../entities/KYCDocumentsConfig";
 // import { User } from "../entities/User.entity";
 
 export const AppDataSource = new DataSource({
@@ -17,18 +18,24 @@ export const AppDataSource = new DataSource({
   synchronize: config.server.nodeEnv === "development",
   // logging: config.server.nodeEnv === "development",
   logging: false,
-  entities: [User, UserKYCSession, UserChat, VideoSession, Compilance],
+  entities: [
+    User,
+    UserKYCSession,
+    UserChat,
+    VideoSession,
+    Compliance,
+    KYCDocumentsConfig,
+  ],
   migrations: [],
   subscribers: [],
 });
 
 export const connectDatabase = async (): Promise<void> => {
-  console.log("../entities/*.entity.ts");
   try {
     await AppDataSource.initialize();
     console.log("✅ Database connected successfully");
   } catch (error) {
-    console.error("❌ Database connection failed:", error);
+    console.error(" Database connection failed:", error);
     process.exit(1);
   }
 };

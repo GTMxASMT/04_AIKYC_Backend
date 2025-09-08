@@ -122,7 +122,7 @@ export class User {
 
   // STAGE MANAGEMENT METHODS
   advanceStage() {
-    if (this.currentStage < KYCStage.COMPLETED) {
+    if (this.currentStage < KYCStage.APPROVED) {
       this.currentStage = this.currentStage + 1;
       this.lastChatAt = new Date();
     }
@@ -148,7 +148,7 @@ export class User {
       KYCStage.FACE_VERIFICATION,
       KYCStage.VIDEO_KYC,
       KYCStage.COMPLIANCE_CHECK,
-      KYCStage.COMPLETED,
+      KYCStage.APPROVED,
     ];
 
     const currentIndex = stageOrder.indexOf(this.currentStage);
@@ -230,6 +230,7 @@ export class User {
             fileURL: session.fileURL,
             EPIC1: session.EPIC1,
             EPIC2: session.EPIC2,
+            EPIC3: session.EPIC3,
             createdAt: session.createdAt,
           })) || [],
     };

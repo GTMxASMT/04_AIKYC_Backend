@@ -33,6 +33,7 @@ router.get("/5/users", adminController.getAllUsers.bind(adminController));
 router.get("/get-user/:id", adminController.getUserById.bind(adminController));
 
 router.get("/kpis", adminController.getKPIs.bind(adminController));
+
 router.get(
   "/face-match-unmatch",
   adminController.getMatchUnmatch.bind(adminController)
@@ -43,6 +44,30 @@ router.get(
 );
 
 router.get("/reports", adminController.getReports.bind(adminController));
+
+router.get(
+  "/accepted-documents",
+  adminController.getAcceptedDocuments.bind(adminController)
+);
+router.get(
+  "/required-documents",
+  adminController.getRequiredDocuments.bind(adminController)
+);
+router.post(
+  "/accepted-documents",
+  adminController.setAcceptedDocuments.bind(adminController)
+);
+router.post(
+  "/required-documents",
+  adminController.setRequiredDocuments.bind(adminController)
+);
+router.post(
+  "/validate-user-docs",
+  adminController.validateUserDocuments.bind(adminController)
+);
+
+// Protected Admin Routes
+router.use(authenticate, authorize(UserRole.ADMIN));
 
 // ----------------------------------------------------------------------------------
 

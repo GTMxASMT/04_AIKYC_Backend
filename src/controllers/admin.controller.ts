@@ -7,6 +7,7 @@ import { checkCompliance } from "../utilities/ruleEngine";
 import { UserService } from "../services/user.service";
 import { asyncHandler } from "../utilities/AsyncHandler";
 import { profile } from "console";
+import { formatTime_ms_string } from "../utilities/formatDate";
 
 export class AdminController {
   private adminService: AdminService;
@@ -24,22 +25,9 @@ export class AdminController {
     next: NextFunction
   ): Promise<void> {
     try {
-      const result = await this.adminService.getAllUsers();
-      const _users = result.users
-        .filter((user) => user.role === UserRole.USER)
-        .map((user) => ({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          phone: user.phone,
-          DOB: user.DOB,
-          "Profile Image": user.profileImage,
-          Verified: user.Verified,
-          "Current Stage": user.currentStage,
-          country: user.country,
-        }));
+      const result = await this.adminService.getAllUsers__();
 
-      res.status(200).json(_users);
+      res.status(200).json(result?.users);
     } catch (error) {
       next(error);
     }
@@ -100,7 +88,6 @@ export class AdminController {
     }
   }
 
-  // KYC Session Management Methods
   public async getAllPendingKYCSessions(
     req: Request,
     res: Response,
@@ -380,8 +367,10 @@ export class AdminController {
         ).length,
         completed: allUsers.users.filter((user) => user.currentStage === 7)
           .length,
+
         rejected: allUsers.users.filter((user) => user.currentStage === 8)
           .length,
+        failed: allUsers.users.filter((user) => user.currentStage === 9).length,
       },
       completionRate: (
         (allUsers.users.filter((user) => user.currentStage === 7).length /
@@ -406,15 +395,61 @@ export class AdminController {
 
   getKPIs = asyncHandler(async (req: Request, res: Response) => {
     // const kpis = await this.adminService.calculateKPIs();
-    const totalKYCs = await this.adminService.getAllKYCSessionsByStatus(
-      Status.COMPLETED
+
+    const TotalKYCs = await this.adminService.getAllKYCSessions();
+
+    const completedKYCs = TotalKYCs.filter(
+      (session) => session.status === Status.COMPLETED
     );
 
+    const rejectedKYCs = TotalKYCs.filter(
+      (session) => session.status === Status.REJECTED
+    );
+
+    const TAT = completedKYCs
+      .map((session) => {
+        const createdAt = session.createdAt;
+        const completedAt = session.completedAt;
+        if (createdAt && completedAt && completedAt > createdAt) {
+          const timeDiff =
+            new Date(completedAt).getTime() - new Date(createdAt).getTime();
+          if (timeDiff < 0) {
+            console.error(`Inconsistent timestamps for session ${session.id}`);
+            throw new ApiError(
+              StatusCode.INTERNAL_SERVER_ERROR,
+              `Inconsistent timestamps for session ${session.id}`
+            );
+          }
+
+          return timeDiff;
+        }
+        return undefined;
+      })
+      .filter((t) => typeof t === "number");
+
+    const avgTAT =
+      TAT.length > 0
+        ? TAT.reduce((acc, curr) => acc + curr, 0) / TAT.length
+        : 0;
+
+    const duration = formatTime_ms_string(avgTAT);
+    const rejectionRate = (rejectedKYCs?.length / TotalKYCs?.length) * 100 || 0;
+
+    const totalFaceMatch = TotalKYCs.map((session) => session.EPIC2?.data);
+
+    const FaceMatchScore =
+      totalFaceMatch.length > 0
+        ? (totalFaceMatch.filter((data) => data && data?.isMatch === true)
+            .length /
+            totalFaceMatch.length) *
+          100
+        : 0;
+
     const KPIs = {
-      "Total KYCs": totalKYCs.length,
-      "Average TAT": "3m 25s",
-      "Rejection Rate": "8.2%",
-      "Face Match Score": "85.6%",
+      "Total KYCs": completedKYCs.length,
+      "Average TAT": duration,
+      "Rejection Rate": `${rejectionRate.toFixed(2)} %`,
+      "Face Match Score": `${FaceMatchScore.toFixed(2)} %`,
     };
 
     res
@@ -457,10 +492,9 @@ export class AdminController {
     const { from, to, type, dataSource } = req.query;
 
     console.log("Report request params:", { from, to, type, dataSource });
-    console.log("Type of 'from':", typeof from);
-    console.log("Type of 'to':", typeof to);
+    // console.log("Type of 'from':", typeof from);
+    // console.log("Type of 'to':", typeof to);
 
-    // Validate date range
     if (!from || !to) {
       res
         .status(400)
@@ -468,10 +502,37 @@ export class AdminController {
       return;
     }
 
+    if (!dataSource) {
+      res
+        .status(400)
+        .json(new ApiResponse(400, null, "Data source is required"));
+      return;
+    }
+
+    if (!type) {
+      res
+        .status(400)
+        .json(new ApiResponse(400, null, "Report type is required"));
+      return;
+    }
+
+    if (from && to && new Date(from as string) >= new Date(to as string)) {
+      res
+        .status(400)
+        .json(
+          new ApiResponse(
+            400,
+            null,
+            "'from' date cannot be later than or equal to 'to' date"
+          )
+        );
+      return;
+    }
+
     const fromDate = from ? new Date(from as string) : undefined;
     const toDate = to ? new Date(to as string) : undefined;
 
-    // Validate type
+    console.log("Parsed dates:", { fromDate, toDate });
     const validTypes = ["tabular", "chart"];
     if (type && !validTypes.includes(type as string)) {
       res
@@ -482,7 +543,6 @@ export class AdminController {
       return;
     }
 
-    // Validate dataSource
     const validDataSources = ["KYC Records", "Users", "Audit Logs"];
     if (dataSource && !validDataSources.includes(dataSource as string)) {
       res
@@ -497,7 +557,11 @@ export class AdminController {
       return;
     }
 
-    let res_data: { data: any[]; labels: any[] } = { data: [], labels: [] };
+    let res_data: { data: any[]; count: number[]; labels: any[] } = {
+      data: [],
+      count: [],
+      labels: [],
+    };
     if (dataSource === "KYC Records") {
       res_data = await this.adminService.getAllKYCSessionsByFilters(
         fromDate,
@@ -506,14 +570,14 @@ export class AdminController {
     } else if (dataSource === "Users") {
       res_data = await this.adminService.getAllUsersByFilter(fromDate, toDate);
     } else if (dataSource === "Audit Logs") {
-      res_data = { data: [], labels: [] };
+      res_data = { data: [], count: [], labels: [] };
     }
 
     res.status(StatusCode.SUCCESS).json(
       new ApiResponse(
         StatusCode.SUCCESS,
         {
-          data: res_data.data,
+          data: type === "chart" ? res_data.count : res_data.data,
           labels: type === "chart" ? res_data.labels : "",
           type,
           source: dataSource,
@@ -521,5 +585,112 @@ export class AdminController {
         "Report data retrieved successfully"
       )
     );
+  });
+
+  //-------------ADMIN CONFIGURATION MANAGEMENT----------------
+  getAcceptedDocuments = asyncHandler(async (req: Request, res: Response) => {
+    const result = await this.adminService.getAcceptedDocuments();
+
+    res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          result,
+          "Accepted documents retrieved successfully"
+        )
+      );
+  });
+
+  // GET /admin/required-documents
+  getRequiredDocuments = asyncHandler(async (req: Request, res: Response) => {
+    const result = await this.adminService.getRequiredDocuments();
+
+    res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          result,
+          "Required documents retrieved successfully"
+        )
+      );
+  });
+
+  // PUT /admin/accepted-documents
+  setAcceptedDocuments = asyncHandler(async (req: Request, res: Response) => {
+    console.log("Request body for accepted documents:", req.body);
+    const acceptedConfig = req.body;
+
+    // Validate required structure
+    if (!acceptedConfig || !acceptedConfig.documents) {
+      res
+        .status(400)
+        .json(
+          new ApiResponse(
+            400,
+            null,
+            "Invalid format. Expected: { documents: { aadhar: boolean, pan: boolean, ... } }"
+          )
+        );
+      return;
+    }
+
+    const updatedBy = "ADMIN";
+
+    await this.adminService.setAcceptedDocuments(acceptedConfig, updatedBy);
+
+    res
+      .status(200)
+      .json(
+        new ApiResponse(200, null, "Accepted documents updated successfully")
+      );
+  });
+
+  // PUT /admin/required-documents
+  setRequiredDocuments = asyncHandler(async (req: Request, res: Response) => {
+    const requiredConfig = req.body;
+
+    // Validate required structure
+    if (!requiredConfig || !requiredConfig.count || !requiredConfig.documents) {
+      res
+        .status(400)
+        .json(
+          new ApiResponse(
+            400,
+            null,
+            "Invalid format. Expected: { count: number, documents: { aadhar: boolean, pan: boolean, ..., any: boolean } }"
+          )
+        );
+      return;
+    }
+
+    const updatedBy = "ADMIN";
+
+    await this.adminService.setRequiredDocuments(requiredConfig, updatedBy);
+
+    res
+      .status(200)
+      .json(
+        new ApiResponse(200, null, "Required documents updated successfully")
+      );
+  });
+
+  // POST /admin/validate-user-docs (for testing)
+  validateUserDocuments = asyncHandler(async (req: Request, res: Response) => {
+    const { userDocuments } = req.body;
+
+    if (!userDocuments || !Array.isArray(userDocuments)) {
+      res
+        .status(400)
+        .json(new ApiResponse(400, null, "userDocuments array is required"));
+      return;
+    }
+
+    const result = await this.adminService.validateUserDocuments(userDocuments);
+
+    res
+      .status(200)
+      .json(new ApiResponse(200, result, "Document validation completed"));
   });
 }

@@ -5,7 +5,7 @@ import { VideoSession } from "../entities/VideoSession.entity";
 import { User } from "../entities/User.entity";
 import { UserKYCSession } from "../entities/UserKYCSession.entity";
 import { ApiError } from "../utilities/ApiError";
-import { UserRole, KYCStage, Status } from "../config";
+import { UserRole, KYCStage, Status, FRONTEND_URL } from "../config";
 import { sendMail } from "../core/sendMail";
 
 interface SessionParticipant {
@@ -26,6 +26,9 @@ interface VerificationData {
   }>;
   status: "approved" | "rejected" | "pending";
   notes?: string;
+  ipAddress?: string;
+  geoLocation?: string;
+  time?: string;
 }
 
 interface SessionInfo {
@@ -81,7 +84,7 @@ export class XWebRTCService {
     const emailBody = `Hello ${user.name},<br/><br/>
     You have been selected for a Video KYC session. Please use the following session ID to join the session:<br/><br/>
     <b>Session ID: ${sessionId}</b><br/><br/>
-    Click <a href="http://localhost:3000/webrtc/join/${sessionId}">here</a> to join the session.<br/><br/>
+    Click <a href="${FRONTEND_URL}video-kyc/${sessionId}">here</a> to join the session.<br/><br/>
     Best regards,<br/>
     AI KYC Team
     `;
@@ -98,7 +101,7 @@ export class XWebRTCService {
     sessionId: string
   ): Promise<SessionInfo> {
     // Validate agent
-    console.log("[service] Validating agent:", agentId);
+    // console.log("[service] Validating agent:", agentId);
     const agent = await this.userRepository.findOne({
       where: { id: agentId, isActive: true },
     });
@@ -112,7 +115,7 @@ export class XWebRTCService {
     }
 
     console.log("[service] Agent validated:", agent.name);
-    console.log("[service] Validating target user:", targetUserId);
+    // console.log("[service] Validating target user:", targetUserId);
 
     // Validate target user
     const targetUser = await this.userRepository.findOne({
@@ -138,7 +141,7 @@ export class XWebRTCService {
       order: { createdAt: "DESC" },
     });
 
-    console.log("[service] Active KYC session:");
+    console.log("[service] Active KYC session:\n\n", activeKYCSession, "\n\n");
     if (!activeKYCSession) {
       throw new ApiError(
         400,
@@ -621,8 +624,6 @@ export class XWebRTCService {
             videoSessionId: sessionId,
             checklist: verificationData.checklist,
             verificationStatus: verificationData.status,
-            verifiedBy: agentId,
-            verifiedAt: new Date().toISOString(),
             participants: session.participants.map((p) => ({
               userId: p.userId,
               name: p.name,
@@ -631,8 +632,12 @@ export class XWebRTCService {
             })),
           },
           meta: {
-            notes: verificationData.notes,
+            verifiedAt: new Date().toISOString(),
             agentId: agentId,
+            ipAddress: verificationData.ipAddress,
+            geoLocation: verificationData.geoLocation,
+            time: verificationData.time,
+            consent: verificationData.status,
           },
         } as any,
         status: kycStatus,

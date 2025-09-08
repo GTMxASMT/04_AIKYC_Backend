@@ -8,3 +8,4 @@ node_modules
 note.tsxt
 note.txt
 /src/config.ts
+/dist

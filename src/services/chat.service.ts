@@ -79,7 +79,7 @@ export class ChatService {
     user.lastChatAt = new Date();
 
     // Update user stage if AI suggests advancement
-    if (aiResponse.advanceStage && user.currentStage < KYCStage.COMPLETED) {
+    if (aiResponse.advanceStage && user.currentStage < KYCStage.APPROVED) {
       user.advanceStage(); // This already updates lastChatAt internally
     }
 
@@ -415,7 +415,7 @@ export class ChatService {
           (user.KYCSessions?.filter((s) => s.status === "verified").length ||
             0) > 0
         );
-      case KYCStage.COMPLETED:
+      case KYCStage.APPROVED:
         return false; // Already completed
       default:
         return false;
@@ -424,6 +424,12 @@ export class ChatService {
 
   private getStageGuidance(stage: KYCStage) {
     const guidance = {
+      [KYCStage.FLAGGED]: {
+        title: "Flagged",
+        description: "Flagged",
+        nextSteps: ["Admin Review", "Manual review"],
+        tips: [],
+      },
       [KYCStage.REJECTED]: {
         title: "Rejected",
         description: "Rejected",
@@ -504,7 +510,7 @@ export class ChatService {
         nextSteps: ["Wait for final verification"],
         tips: ["This may take 24-48 hours", "You'll be notified via email"],
       },
-      [KYCStage.COMPLETED]: {
+      [KYCStage.APPROVED]: {
         title: "KYC Completed ✅",
         description: "Your KYC verification is complete!",
         nextSteps: ["Access full services"],

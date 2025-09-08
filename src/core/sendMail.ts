@@ -16,7 +16,7 @@ export async function sendMail(
   });
 
   const info = await transporter.sendMail({
-    from: `eKYC - <${process.env.EMAIL_USER}>`,
+    from: `eKYC`,
     to,
     subject,
     html: body,
