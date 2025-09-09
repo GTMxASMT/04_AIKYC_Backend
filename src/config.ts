@@ -4,47 +4,45 @@ dotenv.config();
 
 export const config = {
   server: {
-    port: parseInt(process.env.PORT || "5000"),
-    nodeEnv: process.env.NODE_ENV || "development",
-    host: process.env.HOST || "localhost",
+    port: parseInt(process.env.PORT!),
+    nodeEnv: process.env.NODE_ENV!,
+    host: process.env.HOST!,
   },
   database: {
-    host: process.env.DB_HOST || "localhost",
-    port: parseInt(process.env.DB_PORT || "3306"),
-    username: process.env.DB_USERNAME || "root",
-    password: process.env.DB_PASSWORD || "",
-    database: process.env.DB_NAME || "nodejs_backend",
+    host: process.env.DB_HOST!,
+    port: parseInt(process.env.DB_PORT!),
+    username: process.env.DB_USERNAME!,
+    password: process.env.DB_PASSWORD!,
+    database: process.env.DB_NAME!,
   },
   jwt: {
-    accessSecret: process.env.JWT_ACCESS_SECRET || "fallback_access_secret",
-    refreshSecret: process.env.JWT_REFRESH_SECRET || "fallback_refresh_secret",
-    accessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN || "1d",
-    refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "7d",
+    accessSecret: process.env.JWT_ACCESS_SECRET!,
+    refreshSecret: process.env.JWT_REFRESH_SECRET!,
+    accessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN!,
+    refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN!,
   },
   webrtc: {
     corsOrigins:
       process.env.CORS_ORIGINS || "http://localhost:3000,http://127.0.0.1:3000",
     allowEIO3: process.env.SOCKET_ALLOW_EIO3 === "true" || true,
-    upgradeTimeout: parseInt(process.env.SOCKET_UPGRADE_TIMEOUT || "30000"),
-    pingTimeout: parseInt(process.env.SOCKET_PING_TIMEOUT || "60000"),
-    pingInterval: parseInt(process.env.SOCKET_PING_INTERVAL || "25000"),
+    upgradeTimeout: parseInt(process.env.SOCKET_UPGRADE_TIMEOUT!),
+    pingTimeout: parseInt(process.env.SOCKET_PING_TIMEOUT!),
+    pingInterval: parseInt(process.env.SOCKET_PING_INTERVAL!),
     transports: process.env.SOCKET_TRANSPORTS?.split(",") || [
       "websocket",
       "polling",
     ],
-    sessionCleanupInterval: parseInt(
-      process.env.SESSION_CLEANUP_INTERVAL || "3600000"
-    ), // 1 hour
-    maxSignalsPerSession: parseInt(process.env.MAX_SIGNALS_PER_SESSION || "50"),
+    sessionCleanupInterval: parseInt(process.env.SESSION_CLEANUP_INTERVAL!),
+    maxSignalsPerSession: parseInt(process.env.MAX_SIGNALS_PER_SESSION!),
   },
   aws: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
-    region: process.env.AWS_REGION || "us-east-1",
-    s3BucketName: process.env.AWS_S3_BUCKET_NAME || "",
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+    region: process.env.AWS_REGION!,
+    s3BucketName: process.env.AWS_S3_BUCKET_NAME!,
   },
   frontend: {
-    url: process.env.FRONTEND_URL || "http://localhost:3000",
+    url: process.env.FRONTEND_URL!,
   },
   logging: {
     level: process.env.LOG_LEVEL || "info",

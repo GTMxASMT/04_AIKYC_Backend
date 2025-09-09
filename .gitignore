@@ -56,6 +56,6 @@ node_modules
 *.log
 note.tsxt
 note.txt
-/src/config.ts
+# /src/config.ts
 /dist
 
