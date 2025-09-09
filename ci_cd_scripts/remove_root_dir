@@ -1,2 +1,2 @@
 #!/bin/bash
-rm -rf /home/ubuntu/kyc-admin
+rm -rf /home/ubuntu/kyc-service

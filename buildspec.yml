@@ -18,9 +18,9 @@ phases:
   build:
     commands:
      
-      - docker build -t kyc-admin .
-      - docker tag kyc-admin:latest 529134784986.dkr.ecr.ap-south-1.amazonaws.com/kyc-admin:latest
-      - docker push 529134784986.dkr.ecr.ap-south-1.amazonaws.com/kyc-admin:latest
+      - docker build -t kyc-service .
+      - docker tag kyc-service:latest 529134784986.dkr.ecr.ap-south-1.amazonaws.com/kyc-service:latest
+      - docker push 529134784986.dkr.ecr.ap-south-1.amazonaws.com/kyc-service:latest
 
   post_build:
     commands:

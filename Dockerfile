@@ -1,32 +1,35 @@
-# Step 1: Build stage - use Node.js to build the app
+# Step 1: Use an official Node.js runtime as a parent image
 FROM 529134784986.dkr.ecr.ap-south-1.amazonaws.com/node:multi-22.14.0 AS builder
+#FROM node:22.14.0 
+#for local development(will use https://hub.docker.com/_/node/ )
 
-# Set working directory
-WORKDIR /app
+# Step 2: Set the working directory inside the container
+WORKDIR /usr/src/app
 
-# Copy dependencies config
-COPY package*.json ./
+# Step 3: Copy the package.json and package-lock.json (if available)
+ADD . .
 
-# Install dependencies
-RUN npm install
+RUN rm -rf node_modules package-lock.json
 
-# Copy source code
-COPY . .
+# Step 4: Increase npm timeout and install PM2 globally
+RUN npm config set fetch-timeout 600000 && npm install pm2 -g
 
-# Build the app
+# Step 5: Install the dependencies
+RUN npm i --legacy-peer-deps
+
+# Step 7: Build the application (optional, based on your setup)
 RUN npm run build
 
+# Step 8: Expose port 5000
+EXPOSE 5000
 
-# Step 2: Production stage - serve with NGINX
-FROM 529134784986.dkr.ecr.ap-south-1.amazonaws.com/nginx:multi-alpine
+# Step 9: Use PM2 to start the app in production mode
+CMD ["pm2-runtime", "npm", "--", "run", "start:prod"]
 
-# Copy built frontend files to NGINX default public directory
-COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Optional: Replace default NGINX config if needed
-# COPY nginx.conf /etc/nginx/nginx.conf
 
-# Expose port 80
-EXPOSE 5173
 
-# Start NGINX (default command works, no need to override)
+
+
+
+
