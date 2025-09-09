@@ -18,7 +18,6 @@ export class AdminController {
     this.userService = new UserService();
   }
 
-  // User Management Methods (exactly matching your original controller)
   public async getAllUsers(
     req: Request,
     res: Response,
@@ -311,12 +310,8 @@ export class AdminController {
     async (req: Request, res: Response) => {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
-
-      // This would need to be implemented in the service
-      // For now, we can get all users with COMPLIANCE_CHECK stage
       const result = await this.adminService.getAllUsers(page, limit);
 
-      // Filter users in COMPLIANCE_CHECK stage
       const pendingUsers = result.users.filter(
         (user) => user.currentStage === 6
       ); // COMPLIANCE_CHECK = 6
@@ -341,8 +336,7 @@ export class AdminController {
 
   // Admin - Get KYC analytics/statistics
   getKYCAnalytics = asyncHandler(async (req: Request, res: Response) => {
-    // This would need more sophisticated queries, but here's a basic implementation
-    const allUsers = await this.adminService.getAllUsers(1, 1000); // Get a large set for analytics
+    const allUsers = await this.adminService.getAllUsers(1, 1000);
 
     const analytics = {
       totalUsers: allUsers.total,
@@ -394,8 +388,6 @@ export class AdminController {
   //----------------------------------------------------------------------------
 
   getKPIs = asyncHandler(async (req: Request, res: Response) => {
-    // const kpis = await this.adminService.calculateKPIs();
-
     const TotalKYCs = await this.adminService.getAllKYCSessions();
 
     const completedKYCs = TotalKYCs.filter(
@@ -460,8 +452,6 @@ export class AdminController {
   getMatchUnmatch = asyncHandler(async (req: Request, res: Response) => {
     const match = 60;
     const unmatch = 40;
-    // const total = match + unmatch;
-    // const matchUnmatch = await this.adminService.getMatchUnmatch();
     res
       .status(200)
       .json(
@@ -652,7 +642,7 @@ export class AdminController {
     const requiredConfig = req.body;
 
     // Validate required structure
-    if (!requiredConfig || !requiredConfig.count || !requiredConfig.documents) {
+    if (!requiredConfig || !requiredConfig.documents) {
       res
         .status(400)
         .json(
@@ -674,23 +664,5 @@ export class AdminController {
       .json(
         new ApiResponse(200, null, "Required documents updated successfully")
       );
-  });
-
-  // POST /admin/validate-user-docs (for testing)
-  validateUserDocuments = asyncHandler(async (req: Request, res: Response) => {
-    const { userDocuments } = req.body;
-
-    if (!userDocuments || !Array.isArray(userDocuments)) {
-      res
-        .status(400)
-        .json(new ApiResponse(400, null, "userDocuments array is required"));
-      return;
-    }
-
-    const result = await this.adminService.validateUserDocuments(userDocuments);
-
-    res
-      .status(200)
-      .json(new ApiResponse(200, result, "Document validation completed"));
   });
 }

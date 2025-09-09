@@ -19,7 +19,7 @@ interface SessionParticipant {
 
 interface VerificationData {
   checklist: Array<{
-    id: string;
+    id?: string;
     item: string;
     status: boolean;
     notes?: string;
@@ -59,6 +59,21 @@ export class XWebRTCService {
       .substring(2, 9)}`;
   }
 
+  async getUserById(userId: string): Promise<any | null> {
+    const userData = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ["KYCSessions"],
+    });
+
+    const data = {
+      name: userData?.name,
+      email: userData?.email,
+      extracted_data: userData?.KYCSessions?.[0]?.EPIC1?.data?.extracted_data,
+      uploaded_doc: userData?.KYCSessions?.[0]?.EPIC1?.data?.predicted_class,
+    };
+    return data;
+  }
+
   async getVideoKYCUsers(): Promise<User[]> {
     return this.userRepository.find(
       // {where:{isActive:true , role:UserRole.USER, currentStage:KYCStage.VIDEO_KYC}}
@@ -92,16 +107,15 @@ export class XWebRTCService {
     //sendmail
     await sendMail(user.email, "Video KYC Link", emailBody);
 
-    return { sessionId, userId };
+    return { sessionId, userId, user };
   }
   // Create session (only agents/admins can do this)
   async createSession(
     agentId: string,
     targetUserId: string,
-    sessionId: string
+    sessionId: string,
+    metadata?: any
   ): Promise<SessionInfo> {
-    // Validate agent
-    // console.log("[service] Validating agent:", agentId);
     const agent = await this.userRepository.findOne({
       where: { id: agentId, isActive: true },
     });
@@ -114,10 +128,6 @@ export class XWebRTCService {
       throw new ApiError(403, "Only agents or admins can create sessions");
     }
 
-    console.log("[service] Agent validated:", agent.name);
-    // console.log("[service] Validating target user:", targetUserId);
-
-    // Validate target user
     const targetUser = await this.userRepository.findOne({
       where: { id: targetUserId, isActive: true },
       relations: ["KYCSessions"],
@@ -131,8 +141,6 @@ export class XWebRTCService {
       throw new ApiError(400, "Target must be a user role");
     }
 
-    console.log("[service] Target user validated:", targetUser.name);
-    // Check if user has completed EPIC1 and EPIC2
     const activeKYCSession = await this.kycSessionRepository.findOne({
       where: {
         userId: targetUserId,
@@ -141,7 +149,6 @@ export class XWebRTCService {
       order: { createdAt: "DESC" },
     });
 
-    console.log("[service] Active KYC session:\n\n", activeKYCSession, "\n\n");
     if (!activeKYCSession) {
       throw new ApiError(
         400,
@@ -160,23 +167,6 @@ export class XWebRTCService {
       );
     }
 
-    // Check if user already has an active video session
-    // const existingActiveSession = await this.sessionRepository.findOne({
-    //   where: {
-    //     status: "active",
-    //     metadata: { targetUserId: targetUserId } as any,
-    //   },
-    // });
-
-    // console.log("[service] Existing active session:", existingActiveSession);
-
-    // if (existingActiveSession) {
-    //   throw new ApiError(400, "User already has an active video session");
-    // }
-
-    // const sessionId = this.generateSessionId();
-    // Initialize EPIC3 as processing
-    console.log("[service] Initializing EPIC3 for KYC session");
     await this.kycSessionRepository.update(activeKYCSession.id, {
       EPIC3: {
         status: Status.PENDING,
@@ -186,9 +176,7 @@ export class XWebRTCService {
           startedAt: new Date().toISOString(),
           agentId: agentId,
         },
-        meta: {
-          sessionCreatedBy: agentId,
-        },
+        meta: metadata,
       } as any,
     });
 
@@ -200,7 +188,6 @@ export class XWebRTCService {
       });
     }
 
-    console.log("[service] Creating video session in database");
     // Create session in database
     const videoSession = this.sessionRepository.create({
       sessionId,
@@ -214,7 +201,6 @@ export class XWebRTCService {
         participants: [],
       },
     });
-    console.log("[service] Video session entity created:", videoSession);
 
     await this.sessionRepository.save(videoSession);
 
@@ -262,7 +248,6 @@ export class XWebRTCService {
   }
 
   async getSession(sessionId: string): Promise<SessionInfo | null> {
-    // First check in-memory
     let session = this.sessions.get(sessionId);
 
     if (!session) {
@@ -296,7 +281,8 @@ export class XWebRTCService {
 
   async joinSession(
     sessionId: string,
-    user: { userId: string; name: string; email: string; role: UserRole }
+    user: { userId: string; name: string; email: string; role: UserRole },
+    metadata?: any
   ): Promise<{
     session: SessionInfo;
     participant: SessionParticipant;
@@ -340,7 +326,7 @@ export class XWebRTCService {
     const hasUser = session.participants.some((p) => p.role === UserRole.USER);
 
     if (user.role === UserRole.USER) {
-      // User can only join if:
+      // User can join if:
       // 1. They are the target user for this session
       // 2. An agent is already present
       // 3. No other user is present
@@ -360,7 +346,6 @@ export class XWebRTCService {
         throw new ApiError(400, "Another user is already in this session");
       }
     } else if (user.role === UserRole.AGENT || user.role === UserRole.ADMIN) {
-      // Agent/Admin can join if no other agent is present
       if (hasAgent && session.createdBy !== user.userId) {
         throw new ApiError(400, "Another agent is already in this session");
       }
@@ -390,9 +375,7 @@ export class XWebRTCService {
       }
     );
 
-    // Update EPIC3 when both user and agent have joined
     if (session.kycSessionId && hasAgent && user.role === UserRole.USER) {
-      // Find the agent participant and ensure joinedAt is a Date object
       const agentParticipant = session.participants.find(
         (p) => p.role === UserRole.AGENT || p.role === UserRole.ADMIN
       );
@@ -422,9 +405,7 @@ export class XWebRTCService {
                   : new Date(p.joinedAt).toISOString(),
             })),
           },
-          meta: {
-            sessionStatus: "both_participants_present",
-          },
+          meta: metadata,
         } as any,
       });
     }
@@ -504,7 +485,7 @@ export class XWebRTCService {
           await this.kycSessionRepository.update(session.kycSessionId, {
             EPIC3: {
               ...kycSession.EPIC3,
-              status: "failed",
+              status: Status.FAILED,
               message:
                 "Video KYC session cancelled - participants left without verification",
               data: {

@@ -12,14 +12,12 @@ import {
 import { User } from "./User.entity";
 
 @Entity("video_sessions")
-@Index(["sessionId"], { unique: true })
 @Index(["status"])
 export class VideoSession {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
   @Column({ unique: true })
-  @Index()
   sessionId!: string;
 
   @Column({

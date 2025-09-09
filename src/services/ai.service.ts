@@ -320,6 +320,7 @@ export class AIService {
       })
       .promise();
 
+    console.log("Raw Liveness Data - \n", data, "\n\n");
     console.log(
       "--------------------------------------------- LIVENESS RESULT -----------------------------------------------\n"
     );

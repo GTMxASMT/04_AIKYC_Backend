@@ -61,10 +61,6 @@ router.post(
   "/required-documents",
   adminController.setRequiredDocuments.bind(adminController)
 );
-router.post(
-  "/validate-user-docs",
-  adminController.validateUserDocuments.bind(adminController)
-);
 
 // Protected Admin Routes
 router.use(authenticate, authorize(UserRole.ADMIN));

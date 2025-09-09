@@ -11,21 +11,20 @@ export interface AcceptedConfig {
     aadhar: boolean;
     pan: boolean;
     passport: boolean;
-    voter_id: boolean;
-    driving_license: boolean;
   };
+  totalDocumentsCount: number;
+  acceptedDocumentsCount: number;
 }
 
 export interface RequiredConfig {
-  count: number;
   documents: {
-    aadhar: boolean;
-    pan: boolean;
-    passport: boolean;
-    voter_id: boolean;
-    driving_license: boolean;
-    any: boolean;
+    aadhar?: boolean;
+    pan?: boolean;
+    passport?: boolean;
+    any?: boolean;
   };
+  totalRequiredDocumentsCount: number;
+  selectedRequiredDocumentsCount: number;
 }
 
 @Entity()

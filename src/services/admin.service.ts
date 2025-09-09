@@ -4,12 +4,13 @@ import { UserKYCSession } from "../entities/UserKYCSession.entity";
 import { AppDataSource } from "../database/db";
 import { ApiError } from "../utilities/ApiError";
 import { Compliance } from "../entities/Compilance.entity";
-import { KYCStage, Status, UserRole } from "../config";
+import { KYCStage, Status, StatusCode, UserRole } from "../config";
 import {
   AcceptedConfig,
   KYCDocumentsConfig,
   RequiredConfig,
 } from "../entities/KYCDocumentsConfig";
+import { formatTime_ms_string } from "../utilities/formatDate";
 
 export class AdminService {
   private userRepository: Repository<User>;
@@ -24,7 +25,6 @@ export class AdminService {
     this.configRepository = AppDataSource.getRepository(KYCDocumentsConfig);
   }
 
-  // User Management Methods (matching controller requirements)
   // async getAllUsers(): Promise<User[]> {
   //   const users = await this.userRepository.find({
   //     relations: ["KYCSessions"],
@@ -376,22 +376,21 @@ export class AdminService {
         documents: {
           aadhar: true,
           pan: true,
-          passport: true,
-          voter_id: false,
-          driving_license: false,
+          passport: false,
         },
+        totalDocumentsCount: 3,
+        acceptedDocumentsCount: 2,
       };
 
       const defaultRequired: RequiredConfig = {
-        count: 1,
         documents: {
           aadhar: false,
           pan: false,
           passport: false,
-          voter_id: false,
-          driving_license: false,
-          any: true, // Default: user can choose any from accepted
+          any: true,
         },
+        totalRequiredDocumentsCount: 1,
+        selectedRequiredDocumentsCount: 1,
       };
 
       console.log("No active config found, creating default configuration.");
@@ -421,7 +420,7 @@ export class AdminService {
     return config.required;
   }
 
-  //PUT /admin/accepted-documents
+  //POST /admin/accepted-documents
   async setAcceptedDocuments(
     acceptedConfig: AcceptedConfig,
     updatedBy: string
@@ -468,19 +467,9 @@ export class AdminService {
     requiredConfig: RequiredConfig,
     updatedBy: string
   ): Promise<void> {
-    if (requiredConfig.count < 1) {
-      throw new ApiError(400, "Required count must be at least 1");
-    }
-
     const specificRequiredCount = this.countTrueDocs(requiredConfig.documents);
 
     // Validation: If specific documents are required, count should make sense
-    if (specificRequiredCount > requiredConfig.count) {
-      throw new ApiError(
-        400,
-        `Cannot have ${specificRequiredCount} specific required documents when total required count is ${requiredConfig.count}`
-      );
-    }
 
     const config = await this.getActiveConfig();
 
@@ -503,7 +492,7 @@ export class AdminService {
 
     // Logic validation: If all required docs are specific and any=true, that's redundant
     if (
-      specificRequiredCount === requiredConfig.count &&
+      specificRequiredCount === requiredConfig.totalRequiredDocumentsCount &&
       requiredConfig.documents.any
     ) {
       console.warn(
@@ -517,65 +506,65 @@ export class AdminService {
     await this.configRepository.save(config);
   }
 
-  // Helper: Validate user's documents against current config
-  async validateUserDocuments(userDocs: string[]): Promise<{
-    isValid: boolean;
-    message: string;
-  }> {
-    const config = await this.getActiveConfig();
+  // Helper func- validate user's documents against current config
 
-    if (userDocs.length < config.required.count) {
-      return {
-        isValid: false,
-        message: `Need ${config.required.count} documents, got ${userDocs.length}`,
-      };
-    }
+  // -----------------------------------------------------------------------
 
-    const acceptedDocNames = this.getTrueDocNames(config.accepted.documents);
-    const userDocsUpper = userDocs.map((doc) => doc.toUpperCase());
+  async KPIService(): Promise<any> {
+    const TotalKYCs = await this.getAllKYCSessions();
 
-    const invalidDocs = userDocsUpper.filter(
-      (doc) => !acceptedDocNames.includes(doc)
+    const completedKYCs = TotalKYCs.filter(
+      (session) => session.status === Status.COMPLETED
     );
 
-    if (invalidDocs.length > 0) {
-      return {
-        isValid: false,
-        message: `Invalid documents (not accepted): ${invalidDocs.join(", ")}`,
-      };
-    }
-
-    const requiredDocNames = this.getTrueDocNames(config.required.documents);
-    const missingRequired = requiredDocNames.filter(
-      (reqDoc) => !userDocsUpper.includes(reqDoc)
+    const rejectedKYCs = TotalKYCs.filter(
+      (session) => session.status === Status.REJECTED
     );
 
-    if (missingRequired.length > 0) {
-      return {
-        isValid: false,
-        message: `Missing required documents: ${missingRequired.join(", ")}`,
-      };
-    }
+    const TAT = completedKYCs
+      .map((session) => {
+        const createdAt = session.createdAt;
+        const completedAt = session.completedAt;
+        if (createdAt && completedAt && completedAt > createdAt) {
+          const timeDiff =
+            new Date(completedAt).getTime() - new Date(createdAt).getTime();
+          if (timeDiff < 0) {
+            console.error(`Inconsistent timestamps for session ${session.id}`);
+            throw new ApiError(
+              StatusCode.INTERNAL_SERVER_ERROR,
+              `Inconsistent timestamps for session ${session.id}`
+            );
+          }
 
-    const specificRequiredCount = requiredDocNames.length;
-    const remainingCount = config.required.count - specificRequiredCount;
+          return timeDiff;
+        }
+        return undefined;
+      })
+      .filter((t) => typeof t === "number");
 
-    if (config.required.documents.any && remainingCount > 0) {
-      const nonSpecificDocs = userDocsUpper.filter(
-        (doc) => !requiredDocNames.includes(doc)
-      );
+    const avgTAT =
+      TAT.length > 0
+        ? TAT.reduce((acc, curr) => acc + curr, 0) / TAT.length
+        : 0;
 
-      if (nonSpecificDocs.length < remainingCount) {
-        return {
-          isValid: false,
-          message: `Need ${remainingCount} additional documents beyond the required specific ones`,
-        };
-      }
-    }
+    const duration = formatTime_ms_string(avgTAT);
+    const rejectionRate = (rejectedKYCs?.length / TotalKYCs?.length) * 100 || 0;
 
-    return {
-      isValid: true,
-      message: "Documents satisfy KYC requirements",
+    const totalFaceMatch = TotalKYCs.map((session) => session.EPIC2?.data);
+
+    const FaceMatchScore =
+      totalFaceMatch.length > 0
+        ? (totalFaceMatch.filter((data) => data && data?.isMatch === true)
+            .length /
+            totalFaceMatch.length) *
+          100
+        : 0;
+
+    const KPIs = {
+      "Total KYCs": completedKYCs.length,
+      "Average TAT": duration,
+      "Rejection Rate": `${rejectionRate.toFixed(2)} %`,
+      "Face Match Score": `${FaceMatchScore.toFixed(2)} %`,
     };
   }
 }

@@ -20,7 +20,8 @@ const socketManager = new XSocketManager(server);
 // Enhanced CORS configuration for WebRTC support
 const corsOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",")
-  : ["http://localhost:3000", "http://127.0.0.1:5500"];
+  : ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5500"];
+console.log("CORS Origins:", corsOrigins);
 
 app.use(
   cors({

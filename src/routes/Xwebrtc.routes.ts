@@ -1,4 +1,3 @@
-// XWebrtc.routes.ts
 import { Router } from "express";
 import { authenticate, authorize } from "../middlewares/auth.middleware";
 import { XWebRTCController } from "../controllers/Xwebrtc.controller";
@@ -18,6 +17,12 @@ router.post(
   "/select-video-kyc-user/:userId",
   authenticate,
   webrtcController.selectVideoKYCUser
+);
+
+router.get(
+  "/get-user/:userId",
+  authenticate,
+  webrtcController.getSelectedVideoKYCUser
 );
 
 router.post(

@@ -47,15 +47,32 @@ export class XWebRTCController {
       );
   });
 
-  // Send email to user with instructions
+  getSelectedVideoKYCUser = asyncHandler(
+    async (req: Request, res: Response) => {
+      const { userId } = req.params;
 
-  // Only AGENT or ADMIN can create sessions
+      const user = await this.webrtcService.getUserById(userId);
+      return res
+        .status(StatusCode.SUCCESS)
+        .json(
+          new ApiResponse(
+            StatusCode.SUCCESS,
+            user,
+            "Selected Video KYC user retrieved successfully"
+          )
+        );
+    }
+  );
+
   createSession = asyncHandler(async (req: Request, res: Response) => {
     const { targetUserId, sessionId, metadata } = req.body;
     const agentId = req.user?.id;
     const agentRole = req.user?.role;
 
-    console.log("Metadata received:", metadata);
+    console.log(
+      "=============> [WebRTC Controller - AGENT - createSession] Metadata received:",
+      metadata
+    );
     if (!agentId) {
       throw new ApiError(401, "Unauthorized - Agent authentication required");
     }
@@ -72,9 +89,9 @@ export class XWebRTCController {
     const sessionData = await this.webrtcService.createSession(
       agentId,
       targetUserId,
-      sessionId
+      sessionId,
+      metadata
     );
-    console.log("[controller] Session created:", sessionData);
 
     return res
       .status(201)
@@ -113,22 +130,31 @@ export class XWebRTCController {
 
   // Users join existing sessions
   joinSession = asyncHandler(async (req: Request, res: Response) => {
-    const { sessionId, metadata } = req.params;
+    const { sessionId } = req.params;
+
+    const { metadata } = req.body;
     const user = req.user!;
 
-    console.log("Metadata on join:", metadata);
+    console.log(
+      "=============> [WebRTC Controller - USER - joinSession] Metadata received:",
+      metadata
+    );
 
     // Validate user role
     if (![UserRole.USER, UserRole.AGENT, UserRole.ADMIN].includes(user.role)) {
       throw new ApiError(403, "Invalid user role for session");
     }
 
-    const result = await this.webrtcService.joinSession(sessionId, {
-      userId: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-    });
+    const result = await this.webrtcService.joinSession(
+      sessionId,
+      {
+        userId: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      metadata
+    );
 
     return res
       .status(200)
@@ -188,11 +214,22 @@ export class XWebRTCController {
       );
     }
 
+    const formattedChecklist = checklist.map((item) => ({
+      item: item.item,
+      status: item.status,
+    }));
     console.log({ checklist, status, notes, ipAddress, geoLocation, time });
     const result = await this.webrtcService.submitVerification(
       sessionId,
       agentId,
-      { checklist, status, notes, ipAddress, geoLocation, time }
+      {
+        checklist: formattedChecklist,
+        status,
+        notes,
+        ipAddress,
+        geoLocation,
+        time,
+      }
     );
 
     return res
