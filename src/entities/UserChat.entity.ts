@@ -1,4 +1,3 @@
-// UserChat.entity.ts
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -26,9 +25,7 @@ export class UserChat {
   @Column({ nullable: false })
   userId!: string;
 
-  @ManyToOne(() => User, (user) => user.chats, {
-    onDelete: "CASCADE",
-  })
+  @ManyToOne(() => User, (user) => user.chats, { onDelete: "CASCADE" })
   @JoinColumn({ name: "userId" })
   user!: User;
 

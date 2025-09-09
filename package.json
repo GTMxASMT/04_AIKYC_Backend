@@ -11,7 +11,7 @@
     "typeorm": "typeorm-ts-node-commonjs"
   },
   "keywords": [],
-  "author": "",
+  "author": "Gautam Arora, Prashant Mishra",
   "license": "ISC",
   "dependencies": {
     "@aws-sdk/client-rekognition": "^3.864.0",

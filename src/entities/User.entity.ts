@@ -1,4 +1,3 @@
-// User.entity.ts (Updated sections only)
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -20,7 +19,7 @@ import {
 import bcrypt from "bcrypt";
 import { KYCStage, UserRole } from "../config";
 import { UserKYCSession } from "./UserKYCSession.entity";
-import { UserChat } from "./UserChat.entity"; // ✅ Import the new entity
+import { UserChat } from "./UserChat.entity";
 
 @Entity("users")
 export class User {
@@ -37,9 +36,9 @@ export class User {
   @IsNotEmpty({ message: "Email is required" })
   email!: string;
 
-  @Column({ type: "varchar", length: 255 })
+  @Column({ type: "varchar", length: 100 })
   @IsNotEmpty({ message: "Password is required" })
-  @Length(6, 255, { message: "Password must be at least 6 characters long" })
+  @Length(6, 100, { message: "Password must be at least 6 characters long" })
   password!: string;
 
   @Column({ type: "varchar", length: 20, nullable: true })
@@ -55,28 +54,19 @@ export class User {
   @IsOptional()
   country?: string;
 
-  @Column({
-    type: "enum",
-    enum: UserRole,
-    default: UserRole.USER,
-  })
+  @Column({ type: "enum", enum: UserRole, default: UserRole.USER })
   @IsEnum(UserRole, { message: "Role must be either admin, agent or user" })
   role!: UserRole;
 
   @Column({ type: "varchar", length: 500, nullable: true })
   profileImage?: string;
 
-  @Column({
-    type: "enum",
-    enum: KYCStage,
-    default: KYCStage.NOT_STARTED,
-  })
+  @Column({ type: "enum", enum: KYCStage, default: KYCStage.NOT_STARTED })
   currentStage!: KYCStage;
 
   @Column({ type: "boolean", default: false })
   Verified!: boolean;
 
-  // Relationships
   @OneToMany(() => UserKYCSession, (session) => session.user)
   KYCSessions!: UserKYCSession[];
 
@@ -135,7 +125,7 @@ export class User {
 
   getStageProgress(): number {
     // Calculate progress percentage based on stage
-    const totalStages = Object.keys(KYCStage).length / 2; // Enum has both string and number keys
+    const totalStages = Object.keys(KYCStage).length / 2;
     return Math.round((this.currentStage / (totalStages - 1)) * 100);
   }
 
@@ -154,7 +144,7 @@ export class User {
     const currentIndex = stageOrder.indexOf(this.currentStage);
     const targetIndex = stageOrder.indexOf(targetStage);
 
-    return targetIndex <= currentIndex + 1; // Can only advance by 1 step or stay same
+    return targetIndex <= currentIndex + 1;
   }
 
   // Get user's most recent chat
@@ -190,7 +180,7 @@ export class User {
     return bcrypt.compare(candidatePassword, this.password);
   }
 
-  // ✅ Updated toJSON method
+  // Updated toJSON method
   toJSON() {
     const {
       password,
@@ -204,7 +194,6 @@ export class User {
 
     return {
       ...publicData,
-
       uploads: {
         total: this.uploadedDocuments,
         success: this.successfulUploads,
