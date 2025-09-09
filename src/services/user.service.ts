@@ -35,7 +35,7 @@ export class UserService {
       throw new ApiError(409, "User with this email already exists");
     }
 
-    console.log("gtm - ", userData.gtm);
+    // console.log("gtm - ", userData.gtm);
 
     if (!userData.gtm) {
       const captcha = await verifyCaptcha(gretoken);

@@ -124,109 +124,12 @@ app.get("/health", (req, res) => {
 // API routes (including WebRTC routes)
 app.use("/api/v1", routes);
 
-// Sessions endpoint for frontend compatibility
-app.post("/api/sessions", (req, res) => {
-  // This endpoint is for frontend compatibility
-  // The actual session creation happens through WebSocket
-  const { sessionId } = req.body;
-
-  if (!sessionId) {
-    return res.status(400).json({
-      success: false,
-      message: "Session ID is required",
-    });
-  }
-
-  res.status(200).json({
-    success: true,
-    message: "Session endpoint acknowledged",
-    sessionId,
-    note: "Actual session creation happens through WebSocket connection",
-  });
-});
-
-// Root endpoint
-app.get("/", (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Node.js Backend API with WebRTC Support is running!",
-    version: "1.0.0",
-    features: {
-      webrtc: "Video KYC sessions",
-      socketio: "Real-time communication",
-      database: "MySQL with TypeORM",
-    },
-    endpoints: {
-      documentation: "/api/v1",
-      health: "/health",
-      auth: "/api/v1/auth",
-      sessions: "/api/sessions",
-      webrtc: "/api/v1/webrtc",
-    },
-    socketEvents: {
-      connection: "Socket.IO connection endpoint",
-      authentication: ["authenticate", "authenticated", "auth-error"],
-      session: [
-        "join-session",
-        "leave-session",
-        "session-joined",
-        "user-joined",
-        "user-left",
-      ],
-      webrtc: ["webrtc-signal"],
-      verification: ["verification-completed"],
-      recording: ["recording-status", "recording-status-changed"],
-      health: ["ping", "pong"],
-    },
-  });
-});
-
-// WebRTC specific info endpoint
-app.get("/api/webrtc", (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "WebRTC API endpoints",
-    endpoints: {
-      health: "/health",
-      auth: "/api/v1/auth",
-      sessions: "/api/sessions",
-      webrtcSessions: "/api/v1/webrtc/sessions",
-      webrtcHealth: "/api/v1/webrtc/health",
-      webrtcStats: "/api/v1/webrtc/stats",
-    },
-    socketEvents: {
-      authentication: ["authenticate", "auth-error", "authenticated"],
-      session: ["join-session", "leave-session", "user-joined", "user-left"],
-      webrtc: ["webrtc-signal"],
-      verification: ["verification-completed", "onVerificationCompleted"],
-      recording: ["recording-status", "recording-status-changed"],
-      connection: [
-        "connected",
-        "onServerConnected",
-        "onUserJoined",
-        "onUserLeft",
-      ],
-      health: ["ping", "pong"],
-    },
-    activeConnections: socketManager.getActiveConnections(),
-    serverHealth: socketManager.getServerHealth(),
-  });
-});
 
 // 404 handler for undefined routes
 app.use("/{*any}", (req, res) => {
   res.status(404).json({
     success: false,
     message: `Route ${req.originalUrl} not found`,
-    availableRoutes: {
-      base: "/",
-      api: "/api/v1",
-      health: "/health",
-      webrtc: "/api/webrtc",
-      auth: "/api/v1/auth",
-      sessions: "/api/sessions",
-      webrtcSessions: "/api/v1/webrtc/sessions",
-    },
   });
 });
 
@@ -246,4 +149,4 @@ process.on("SIGINT", async () => {
   process.exit(0);
 });
 
-export { app, server, socketManager };
+export { server, socketManager };

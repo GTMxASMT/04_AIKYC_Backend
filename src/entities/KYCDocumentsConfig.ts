@@ -1,10 +1,4 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-} from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from "typeorm";
 
 export interface AcceptedConfig {
   documents: {
@@ -39,17 +33,10 @@ export class KYCDocumentsConfig {
   })
   accepted!: AcceptedConfig;
 
-  @Column({
-    type: "json",
-    comment:
-      "Required documents configuration with count and specific requirements",
-  })
+  @Column({ type: "json", comment: "Required documents configuration with count and specific requirements" })
   required!: RequiredConfig;
 
-  @Column({
-    type: "boolean",
-    default: true,
-  })
+  @Column({ type: "boolean", default: true })
   isActive!: boolean;
 
   @CreateDateColumn()
@@ -58,10 +45,6 @@ export class KYCDocumentsConfig {
   @UpdateDateColumn()
   updatedAt!: Date;
 
-  @Column({
-    type: "varchar",
-    length: 100,
-    nullable: true,
-  })
+  @Column({ type: "varchar", length: 100, nullable: true })
   updatedBy!: string;
 }

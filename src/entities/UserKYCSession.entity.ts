@@ -1,12 +1,4 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  ManyToOne,
-  CreateDateColumn,
-  UpdateDateColumn,
-  JoinColumn,
-} from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, UpdateDateColumn, JoinColumn } from "typeorm";
 import { User } from "./User.entity";
 import { Status } from "../config";
 
@@ -15,18 +7,15 @@ export class UserKYCSession {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
-  @Column({ nullable: false }) // Explicitly set as non-nullable
+  @Column({ nullable: false }) 
   userId!: string;
 
-  @ManyToOne(() => User, (user) => user.KYCSessions, {
-    onDelete: "CASCADE",
-    onUpdate: "CASCADE",
-  })
+  @ManyToOne(() => User,  {onDelete: "CASCADE", onUpdate: "CASCADE",})
   @JoinColumn({ name: "userId" })
   user!: User;
 
   @Column({ default: "pending" })
-  status!: Status; // pending | completed | verified | rejected
+  status!: Status; 
 
   @Column({ type: "text", nullable: true })
   fileURL?: string;
@@ -67,7 +56,7 @@ export class UserKYCSession {
   // }[];
 
   @Column({ type: "varchar", length: 50, nullable: true })
-  documentType?: string; // aadhaar | pan | passport
+  documentType?: string;
 
   @CreateDateColumn()
   createdAt!: Date;

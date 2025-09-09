@@ -1,14 +1,5 @@
 // UserChat.entity.ts
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  ManyToOne,
-  CreateDateColumn,
-  UpdateDateColumn,
-  JoinColumn,
-  BeforeInsert,
-} from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, UpdateDateColumn, JoinColumn, BeforeInsert } from "typeorm";
 import { User } from "./User.entity";
 
 // Simple message interface
@@ -26,9 +17,7 @@ export class UserChat {
   @Column({ nullable: false })
   userId!: string;
 
-  @ManyToOne(() => User, (user) => user.chats, {
-    onDelete: "CASCADE",
-  })
+  @ManyToOne(() => User, (user) => user.chats, { onDelete: "CASCADE" })
   @JoinColumn({ name: "userId" })
   user!: User;
 
