@@ -1,0 +1,38 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 18
+    commands:
+      - echo "Install phase started"
+      - npm install -g aws-cli
+
+  pre_build:
+    commands:
+      - echo "Pre-build phase started"
+      - echo "Logging in to Amazon ECR"
+      - aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 529134784986.dkr.ecr.ap-south-1.amazonaws.com
+     
+
+  build:
+    commands:
+     
+      - docker build -t kyc-admin .
+      - docker tag kyc-admin:latest 529134784986.dkr.ecr.ap-south-1.amazonaws.com/kyc-admin:latest
+      - docker push 529134784986.dkr.ecr.ap-south-1.amazonaws.com/kyc-admin:latest
+
+  post_build:
+    commands:
+      - echo "Post build started"
+      - mkdir -p gen
+      - mv appspecdev.yml gen/appspec.yml
+      - mv ci_cd_scripts gen/
+      - ls gen/
+      - ls gen/ci_cd_scripts
+
+artifacts:
+  files:
+    - "**/*"
+  discard-paths: no
+  base-directory: gen

@@ -1,0 +1,23 @@
+version: 0.0
+os: linux
+files:
+  - source: /
+    destination: /home/ubuntu/kyc-ui
+    
+hooks:
+  BeforeInstall:
+    - location: ci_cd_scripts/remove_root_dir
+      timeout: 900
+      runas: root
+  ApplicationStart:
+    - location: ci_cd_scripts/start_server
+      timeout: 300
+      runas: root
+  ApplicationStop:
+    - location: ci_cd_scripts/stop_server
+      timeout: 300
+      runas: root
+  ValidateService:
+    - location: ci_cd_scripts/validate_service
+      timeout: 300
+      runas: root
