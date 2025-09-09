@@ -1,6 +1,6 @@
 # Step 1: Use an official Node.js runtime as a parent image
 FROM 529134784986.dkr.ecr.ap-south-1.amazonaws.com/node:multi-22.14.0 AS builder
-#FROM node:22.14.0 
+#ROM node:22.14.0 
 #for local development(will use https://hub.docker.com/_/node/ )
 
 # Step 2: Set the working directory inside the container
