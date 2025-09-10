@@ -1,0 +1,3 @@
+docker stop kyc-service
+docker rm kyc-service
+docker image prune -a -f
