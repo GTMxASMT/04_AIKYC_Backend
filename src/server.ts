@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { AppDataSource } from "./database/db";
+import { AppDataSource, connectDatabase } from "./database/db";
 import { config } from "./config";
 import { server, socketManager } from "./app";
 
@@ -8,19 +8,15 @@ const startServer = async () => {
     console.log("Starting WebRTC KYC Server...");
 
     // Initialize database connection
-    console.log("Connecting to database");
-    await AppDataSource.initialize();
-    console.log("Database connected successfully");
+    await connectDatabase();
 
     // Start HTTP server (includes Socket.IO for WebRTC)
     const PORT = config.server.port;
     const HOST = config.server.host;
 
     server.listen(PORT, HOST, () => {
-  
       console.log(`Server run on: http://${HOST}:${PORT}`);
       console.log(`Environment: ${config.server.nodeEnv}`);
-
     });
 
     // Handle server errors
@@ -37,18 +33,21 @@ const startServer = async () => {
     // Periodic cleanup of inactive sessions
     setInterval(async () => {
       try {
-        const webrtcService = require("./services/XWebrtc.service").XWebRTCService;
+        const webrtcService =
+          require("./services/XWebrtc.service").XWebRTCService;
         const service = new webrtcService();
         await service.cleanupInactiveSessions();
       } catch (error) {
         console.error("Session cleanup error:", error);
       }
-    }, 5 * 60 * 1000); 
+    }, 5 * 60 * 1000);
   } catch (error: any) {
     console.error("Failed to start server:", error);
 
-    if(error.code === "ENOTFOUND" || error.code === "ECONNREFUSED") {
-      console.error("Database connection failed. Check your database configuration:");
+    if (error.code === "ENOTFOUND" || error.code === "ECONNREFUSED") {
+      console.error(
+        "Database connection failed. Check your database configuration:"
+      );
       console.error(`- Host: ${config.database.host}:${config.database.port}`);
       console.error(`- Database: ${config.database.database}`);
       console.error(`- Username: ${config.database.username}`);

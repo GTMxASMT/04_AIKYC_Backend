@@ -1,4 +1,3 @@
-// app.ts - Updated with Socket.IO and WebRTC integration
 import "reflect-metadata";
 import express from "express";
 import cors from "cors";
@@ -124,7 +123,6 @@ app.get("/health", (req, res) => {
 
 // API routes (including WebRTC routes)
 app.use("/api/v1", routes);
-
 
 // 404 handler for undefined routes
 app.use("/{*any}", (req, res) => {

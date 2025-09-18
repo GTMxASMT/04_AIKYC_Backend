@@ -8,15 +8,59 @@ import { UserService } from "../services/user.service";
 import { asyncHandler } from "../utilities/AsyncHandler";
 import { profile } from "console";
 import { formatTime_ms_string } from "../utilities/formatDate";
+const accessTokenCookieOptions = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "strict" as const,
+  maxAge: 24 * 60 * 60 * 1000,
+});
 
+const refreshTokenCookieOptions = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "strict" as const,
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days - match JWT expiry
+});
 export class AdminController {
   private adminService: AdminService;
-  private userService: UserService;
 
   constructor() {
     this.adminService = new AdminService();
-    this.userService = new UserService();
   }
+
+  login = asyncHandler(async (req: Request, res: Response) => {
+    const { gtm, gretoken } = req.body;
+
+    if (!gtm && !gretoken) {
+      console.log("[Controller] no gretoken in body");
+    }
+    const { user, tokens } = await this.adminService.login(req.body, gretoken);
+
+    res.cookie("accessToken", tokens.accessToken, accessTokenCookieOptions());
+    res.cookie(
+      "refreshToken",
+      tokens.refreshToken,
+      refreshTokenCookieOptions()
+    );
+
+    console.log("ADMIN login successfull");
+
+    res
+      .status(200)
+      .json(new ApiResponse(200, { user, tokens }, "Login successful"));
+  });
+
+  logout = asyncHandler(async (req: Request, res: Response) => {
+    if (req.user?.id) {
+      await this.adminService.logout(req.user.id);
+    }
+
+    // Clear cookies
+    res.clearCookie("accessToken");
+    res.clearCookie("refreshToken");
+
+    res.status(200).json(new ApiResponse(200, null, "ADMIN Logout successful"));
+  });
 
   public async getAllUsers(
     req: Request,
@@ -506,18 +550,18 @@ export class AdminController {
       return;
     }
 
-    if (from && to && new Date(from as string) >= new Date(to as string)) {
-      res
-        .status(400)
-        .json(
-          new ApiResponse(
-            400,
-            null,
-            "'from' date cannot be later than or equal to 'to' date"
-          )
-        );
-      return;
-    }
+    // if (from && to && new Date(from as string) >= new Date(to as string)) {
+    //   res
+    //     .status(400)
+    //     .json(
+    //       new ApiResponse(
+    //         400,
+    //         null,
+    //         "'from' date cannot be later than or equal to 'to' date"
+    //       )
+    //     );
+    //   return;
+    // }
 
     const fromDate = from ? new Date(from as string) : undefined;
     const toDate = to ? new Date(to as string) : undefined;

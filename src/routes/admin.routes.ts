@@ -6,6 +6,22 @@ import { UserRole } from "../config";
 const router = Router();
 const adminController = new AdminController();
 
+router.post("/login", adminController.login.bind(adminController));
+router.get(
+  "/accepted-documents",
+  adminController.getAcceptedDocuments.bind(adminController)
+);
+router.get(
+  "/required-documents",
+  adminController.getRequiredDocuments.bind(adminController)
+);
+
+
+//------------------------------------------------------------------------
+router.use(authenticate, authorize(UserRole.SUPERADMIN, UserRole.ADMIN));
+
+router.post("/logout", adminController.logout.bind(adminController));
+
 router.get(
   "/5/aml-pep-list",
   adminController.getAll_AML_PEP_List.bind(adminController)
@@ -45,14 +61,6 @@ router.get(
 
 router.get("/reports", adminController.getReports.bind(adminController));
 
-router.get(
-  "/accepted-documents",
-  adminController.getAcceptedDocuments.bind(adminController)
-);
-router.get(
-  "/required-documents",
-  adminController.getRequiredDocuments.bind(adminController)
-);
 router.post(
   "/accepted-documents",
   adminController.setAcceptedDocuments.bind(adminController)
@@ -63,7 +71,6 @@ router.post(
 );
 
 // Protected Admin Routes
-router.use(authenticate, authorize(UserRole.ADMIN));
 
 // ----------------------------------------------------------------------------------
 

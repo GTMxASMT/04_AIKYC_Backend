@@ -38,6 +38,7 @@ export class UserController {
       refreshTokenCookieOptions()
     );
 
+    console.log("Register successfull");
     res
       .status(201)
       .json(
@@ -59,6 +60,8 @@ export class UserController {
       tokens.refreshToken,
       refreshTokenCookieOptions()
     );
+
+    console.log("Login successfull");
 
     res
       .status(200)
@@ -125,29 +128,6 @@ export class UserController {
       .json(new ApiResponse(200, user, "Profile retrieved successfully"));
   });
 
-  // getAllUsers = asyncHandler(async (req: Request, res: Response) => {
-  //   const page = parseInt(req.query.page as string) || 1;
-  //   const limit = parseInt(req.query.limit as string) || 10;
-
-  //   const result = await userService.getAllUsers(page, limit);
-
-  //   res.status(200).json(
-  //     new ApiResponse(
-  //       200,
-  //       {
-  //         users: result.users,
-  //         pagination: {
-  //           page,
-  //           limit,
-  //           total: result.total,
-  //           totalPages: result.totalPages,
-  //         },
-  //       },
-  //       "Users retrieved successfully"
-  //     )
-  //   );
-  // });
-
   getUserById = asyncHandler(async (req: Request, res: Response) => {
     const user = await userService.getUserById(req.params.id);
 
@@ -187,171 +167,52 @@ export class UserController {
       .json(new ApiResponse(200, user, "Profile image uploaded successfully"));
   });
 
-  // // ================================ EPIC1 - DOCUMENT PROCESSING ================================
-  // processDocument = asyncHandler(async (req: Request, res: Response) => {
-  //   if (!req.file) {
-  //     res.status(400).json(new ApiResponse(400, null, "No file uploaded"));
-  //     return;
-  //   }
+  forgetPassword = asyncHandler(async (req: Request, res: Response) => {
+    const { email } = req.body;
 
-  //   if (!req.user) {
-  //     res.status(401).json(new ApiResponse(401, null, "Unauthorized"));
-  //     return;
-  //   }
-
-  //   const result = await userService.processDocument(req.user.id, req.file);
-
-  //   res
-  //     .status(200)
-  //     .json(new ApiResponse(200, result, "Document processed successfully"));
-  // });
-
-  // // ================================ EPIC2 - LIVENESS & FACE VERIFICATION ================================
-  // livenessStart = asyncHandler(async (req: Request, res: Response) => {
-  //   if (!req.user) {
-  //     res.status(401).json(new ApiResponse(401, null, "Unauthorized"));
-  //     return;
-  //   }
-
-  //   const sessionId = await userService.LivenessCheckStart();
-  //   res
-  //     .status(200)
-  //     .json(
-  //       new ApiResponse(
-  //         200,
-  //         { SessionId: sessionId, status: "success" },
-  //         "Liveness session started"
-  //       )
-  //     );
-  // });
-
-  // livenessResult = asyncHandler(async (req: Request, res: Response) => {
-  //   if (!req.user) {
-  //     res.status(401).json(new ApiResponse(401, null, "Unauthorized"));
-  //     return;
-  //   }
-  //   const sessionId = req.params.id;
-  //   if (!sessionId) {
-  //     res
-  //       .status(400)
-  //       .json(new ApiResponse(400, null, "Session ID is required"));
-  //     return;
-  //   }
-
-  //   const result = await userService.LivenessCheckResult(sessionId);
-
-  //   if (!result) {
-  //     console.log(
-  //       "[controller] Liveness check result not found for session:",
-  //       sessionId
-  //     );
-  //     res
-  //       .status(404)
-  //       .json(new ApiResponse(404, null, "Liveness check result not found"));
-  //     return;
-  //   }
-
-  //   res
-  //     .status(200)
-  //     .json(
-  //       new ApiResponse(
-  //         200,
-  //         result,
-  //         "Liveness check result retrieved successfully"
-  //       )
-  //     );
-  // });
-
-  // compareFaces = asyncHandler(async (req: Request, res: Response) => {
-  //   if (!req.file) {
-  //     res.status(400).json(new ApiResponse(400, null, "No file uploaded"));
-  //     return;
-  //   }
-
-  //   if (!req.user) {
-  //     res.status(401).json(new ApiResponse(401, null, "Unauthorized"));
-  //     return;
-  //   }
-
-  //   const { livenessImageBytes, s3Bucket, s3Key } = req.body;
-
-  //   const result = await userService.compareFaces(
-  //     req.user.id,
-  //     req.file,
-  //     livenessImageBytes,
-  //     s3Bucket,
-  //     s3Key
-  //   );
-
-  //   res
-  //     .status(200)
-  //     .json(new ApiResponse(200, result, "Faces compared successfully"));
-  // });
-
-  // ================================ EPIC3 - VIDEO KYC ================================
-  startVideoKYC = asyncHandler(async (req: Request, res: Response) => {
-    if (!req.user) {
-      res.status(401).json(new ApiResponse(401, null, "Unauthorized"));
-      return;
-    }
-
-    const { sessionId, agentData } = req.body;
-
-    const result = await userService.videoKYC(
-      req.user.id,
-      sessionId,
-      agentData
-    );
+    const resetToken = await userService.forgetPassword(email);
 
     res
       .status(200)
       .json(
-        new ApiResponse(200, result, "Video KYC session started successfully")
+        new ApiResponse(
+          200,
+          { resetToken },
+          "Password reset token generated. Check your email."
+        )
       );
   });
 
-  completeVideoKYC = asyncHandler(async (req: Request, res: Response) => {
-    if (!req.user) {
-      res.status(401).json(new ApiResponse(401, null, "Unauthorized"));
-      return;
+  resetPassword = asyncHandler(async (req: Request, res: Response) => {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      throw new ApiError(400, "Token and new password are required");
     }
 
-    const { sessionId } = req.params;
-    const verificationData = req.body;
-
-    // Validate required fields
-    const requiredFields = [
-      "agentVerification",
-      "documentReview",
-      "faceComparison",
-      "addressVerification",
-      "signatureVerification",
-    ];
-
-    for (const field of requiredFields) {
-      if (typeof verificationData[field] !== "boolean") {
-        res
-          .status(400)
-          .json(
-            new ApiResponse(
-              400,
-              null,
-              `${field} is required and must be a boolean`
-            )
-          );
-        return;
-      }
-    }
-
-    const result = await userService.completeVideoKYC(
-      req.user.id,
-      sessionId,
-      verificationData
-    );
+    await userService.resetPassword(token, newPassword);
 
     res
       .status(200)
-      .json(new ApiResponse(200, result, "Video KYC completed successfully"));
+      .json(new ApiResponse(200, null, "Password reset successfully"));
+  });
+
+  changePassword = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      throw new ApiError(401, "Unauthorized");
+    }
+
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      throw new ApiError(400, "Current and new passwords are required");
+    }
+
+    await userService.changePassword(req.user.id, currentPassword, newPassword);
+
+    res
+      .status(200)
+      .json(new ApiResponse(200, null, "Password changed successfully"));
   });
 
   // ================================ KYC SESSION MANAGEMENT ================================

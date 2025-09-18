@@ -95,7 +95,7 @@ export class AIService {
 
     const user = await this.userRepository.findOne({
       where: { id: userId, isActive: true },
-      relations: ["KYCSessions"],
+      relations: [],
     });
 
     if (!user) {
@@ -163,9 +163,10 @@ export class AIService {
     );
 
     let ai_response, ai_response_data;
+    console.log(process.env.AI_BACKEND_URL+ "/kyc/process-document")
     try {
       ai_response = await fetch(
-        `${process.env.AI_BACKEND_URL}/document/process`,
+        `${process.env.AI_BACKEND_URL}/kyc/process-document`,
         {
           method: "POST",
           body: formData,
@@ -320,10 +321,10 @@ export class AIService {
       })
       .promise();
 
+      console.log(
+        "--------------------------------------------- LIVENESS RESULT -----------------------------------------------\n"
+      );
     console.log("Raw Liveness Data - \n", data, "\n\n");
-    console.log(
-      "--------------------------------------------- LIVENESS RESULT -----------------------------------------------\n"
-    );
 
     // console.log("\nrekognition data - ", data);
 
@@ -369,13 +370,13 @@ export class AIService {
   }
 
   // EPIC2 - FACE VERIFICATION/COMPARISON
-  async compareFaces(
-    userId: string,
-    file: Express.Multer.File, // Selfie image for comparison
-    livenessImageBytes?: string, // Optional: if you have liveness image directly
-    s3Bucket?: string,
-    s3Key?: string
-  ): Promise<any> {
+    async compareFaces(
+      userId: string,
+      file: Express.Multer.File, // Selfie image for comparison
+      livenessImageBytes?: string, // Optional: if you have liveness image directly
+      s3Bucket?: string,
+      s3Key?: string
+    ): Promise<any> {
     console.log(
       "--------------------------- FACE COMPARISON ---------------------------\n"
     );
@@ -397,9 +398,7 @@ export class AIService {
       );
     }
 
-    console.log(
-      `Using most recent KYC Session: ${session.id} for face comparison`
-    );
+    console.log(`Using most recent KYC Session: ${session.id} for face comparison`);
 
     let livenessBuffer: Buffer;
 
@@ -421,6 +420,9 @@ export class AIService {
       );
     }
 
+    console.log("\n----------------------LIVENESS BUFFER---------------\n", livenessBuffer,"\n--------------------------------------\n");
+
+    // Step ")
     // Step 2: Initialize EPIC2 as processing
     if (!session.EPIC2) {
       session.EPIC2 = {

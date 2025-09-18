@@ -73,6 +73,12 @@ export class User {
   @OneToMany(() => UserChat, (chat) => chat.user)
   chats!: UserChat[];
 
+  @Column({ type: "varchar", length: 500, nullable: true, select: false })
+  resetPasswordToken?: string;
+
+  @Column({ type: "timestamp", nullable: true, select: false })
+  resetPasswordExpires?: Date;
+
   @Column({ type: "timestamp", nullable: true })
   lastChatAt?: Date;
 

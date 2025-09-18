@@ -11,6 +11,8 @@ import {
   RequiredConfig,
 } from "../entities/KYCDocumentsConfig";
 import { formatTime_ms_string } from "../utilities/formatDate";
+import generateTokens from "../utilities/generateTokens";
+import verifyCaptcha from "../utilities/verifyCaptcha";
 
 export class AdminService {
   private userRepository: Repository<User>;
@@ -25,15 +27,53 @@ export class AdminService {
     this.configRepository = AppDataSource.getRepository(KYCDocumentsConfig);
   }
 
-  // async getAllUsers(): Promise<User[]> {
-  //   const users = await this.userRepository.find({
-  //     relations: ["KYCSessions"],
-  //     order: { createdAt: "DESC" },
-  //   });
+  // -------------------------------- ADMIN LOGIN ------------------------------
 
-  //   return users;
-  // }
+  async login(
+    loginData: { email: string; password: string },
+    gretoken: string
+  ): Promise<{ user: User; tokens: any }> {
+    console.log("login data:", loginData);
 
+    const user = await this.userRepository.findOne({
+      where: {
+        email: loginData.email,
+        // role: UserRole.ADMIN || UserRole.COORDINATOR || UserRole.SUPERADMIN,
+        isActive: true,
+      },
+    });
+
+    if (!user) {
+      console.log("user not found");
+      throw new ApiError(401, "Invalid email or password");
+    }
+
+    const isPasswordValid = await user.comparePassword(loginData.password);
+    console.log("isPasswordValid", isPasswordValid);
+    if (!isPasswordValid) {
+      throw new ApiError(401, "Invalid email or password");
+    }
+
+    // if (!loginData.gtm) {
+    //   const captcha = await verifyCaptcha(gretoken);
+
+    //   if (!captcha) {
+    //     console.log("Captcha token verification failed");
+    //     throw new ApiError(400, "Captcha token verification failed");
+    //   }
+    // }
+    const tokens = generateTokens(user);
+    user.refreshToken = tokens.refreshToken;
+
+    await this.userRepository.save(user);
+
+    return { user, tokens };
+  }
+
+  // Logout user
+  async logout(userId: string): Promise<void> {
+    await this.userRepository.update(userId, { refreshToken: undefined });
+  }
   async getAllUsers(
     page: number = 1,
     limit: number = 15
@@ -378,19 +418,27 @@ export class AdminService {
           pan: true,
           passport: false,
         },
-        totalDocumentsCount: 3,
+        // totalDocumentsCount: 3,
         acceptedDocumentsCount: 2,
       };
+//      {
+// "documents": {"any": true, "pan": false, "aadhaar": false, "passport": false}, 
+// "totalRequiredDocumentsCount": 1, 
+// requiredDocumentOptions : {"1":["aadhaar"] , "2":[], "3":[]}, 
+// leftDocs : ["pan", "passport"]}
 
+      
       const defaultRequired: RequiredConfig = {
-        documents: {
-          aadhar: false,
-          pan: false,
-          passport: false,
-          any: true,
-        },
+        // documents: {
+        //   aadhar: false,
+        //   pan: false,
+        //   passport: false,
+        //   any: true,
+        // },
         totalRequiredDocumentsCount: 1,
-        selectedRequiredDocumentsCount: 1,
+        requiredDocumentOptions : {"1":["aadhaar"] , "2":[], "3":[]},
+        leftDocs : ["pan", "passport"]
+        // selectedRequiredDocumentsCount: 1,
       };
 
       console.log("No active config found, creating default configuration.");
@@ -437,23 +485,23 @@ export class AdminService {
     const acceptedDocNames = this.getTrueDocNames(acceptedConfig.documents);
     console.log("Accepted Document Names:", acceptedDocNames);
 
-    const requiredDocNames = this.getTrueDocNames(config.required.documents);
-    console.log("Currently Required Document Names:", requiredDocNames);
+    // const requiredDocNames = this.getTrueDocNames(config.required.documents);
+    // console.log("Currently Required Document Names:", requiredDocNames);
 
-    const invalidRequired = requiredDocNames.filter(
-      (reqDoc) => !acceptedDocNames.includes(reqDoc)
-    );
+    // const invalidRequired = requiredDocNames.filter(
+    //   (reqDoc) => !acceptedDocNames.includes(reqDoc)
+    // );
 
-    console.log("Invalid Required Documents:", invalidRequired);
+    // console.log("Invalid Required Documents:", invalidRequired);
 
-    if (invalidRequired.length > 0) {
-      throw new ApiError(
-        400,
-        `Cannot remove documents that are set as required: ${invalidRequired.join(
-          ", "
-        )}`
-      );
-    }
+    // if (invalidRequired.length > 0) {
+    //   throw new ApiError(
+    //     400,
+    //     `Cannot remove documents that are set as required: ${invalidRequired.join(
+    //       ", "
+    //     )}`
+    //   );
+    // }
 
     console.log("Updating accepted documents to:", acceptedDocNames);
 
@@ -467,7 +515,7 @@ export class AdminService {
     requiredConfig: RequiredConfig,
     updatedBy: string
   ): Promise<void> {
-    const specificRequiredCount = this.countTrueDocs(requiredConfig.documents);
+    // const specificRequiredCount = this.countTrueDocs(requiredConfig.documents);
 
     // Validation: If specific documents are required, count should make sense
 
@@ -475,30 +523,30 @@ export class AdminService {
 
     // Check if required specific documents are in accepted list
     const acceptedDocNames = this.getTrueDocNames(config.accepted.documents);
-    const requiredDocNames = this.getTrueDocNames(requiredConfig.documents);
+    // const requiredDocNames = this.getTrueDocNames(requiredConfig.documents);
 
-    const invalidRequired = requiredDocNames.filter(
-      (reqDoc) => !acceptedDocNames.includes(reqDoc)
-    );
+    // const invalidRequired = requiredDocNames.filter(
+    //   (reqDoc) => !acceptedDocNames.includes(reqDoc)
+    // );
 
-    if (invalidRequired.length > 0) {
-      throw new ApiError(
-        400,
-        `These required documents are not in accepted list: ${invalidRequired.join(
-          ", "
-        )}`
-      );
-    }
+    // if (invalidRequired.length > 0) {
+    //   throw new ApiError(
+    //     400,
+    //     `These required documents are not in accepted list: ${invalidRequired.join(
+    //       ", "
+    //     )}`
+    //   );
+    // }
 
     // Logic validation: If all required docs are specific and any=true, that's redundant
-    if (
-      specificRequiredCount === requiredConfig.totalRequiredDocumentsCount &&
-      requiredConfig.documents.any
-    ) {
-      console.warn(
-        "Warning: All required positions are filled with specific docs, 'any' flag is redundant"
-      );
-    }
+    // if (
+    //   specificRequiredCount === requiredConfig.totalRequiredDocumentsCount &&
+    //   requiredConfig.documents.any
+    // ) {
+    //   console.warn(
+    //     "Warning: All required positions are filled with specific docs, 'any' flag is redundant"
+    //   );
+    // }
 
     // Update required configuration
     config.required = requiredConfig;

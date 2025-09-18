@@ -107,8 +107,12 @@ export const AML_PEP_Rules = [
 ];
 // Enums
 export enum UserRole {
+  SUPERADMIN = "superadmin",
   ADMIN = "admin",
   USER = "user",
+  COORDINATOR = "coordinator",
+  
+
   AGENT = "agent",
 }
 

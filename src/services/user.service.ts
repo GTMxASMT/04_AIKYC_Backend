@@ -1,7 +1,9 @@
 import jwt from "jsonwebtoken";
 import { Repository } from "typeorm";
+import crypto from "crypto";
+import { MoreThan } from "typeorm";
 
-import { config, KYCStage, Status, StatusCode } from "../config";
+import { config, FRONTEND_URL, KYCStage, Status, StatusCode } from "../config";
 import { AppDataSource } from "../database/db";
 import { CreateUserDTO, UpdateUserDTO, LoginDTO } from "../DTOs/user.dto";
 import { rekognition } from "./AWS/rekognition.service";
@@ -12,6 +14,7 @@ import { ApiError } from "../utilities/ApiError";
 import { uploadBufferToCloudinary } from "../utilities/cloudinary";
 import verifyCaptcha from "../utilities/verifyCaptcha";
 import generateTokens from "../utilities/generateTokens";
+import { sendMail } from "../core/sendMail";
 
 export class UserService {
   private userRepository: Repository<User>;
@@ -67,8 +70,6 @@ export class UserService {
       where: { email: loginData.email, isActive: true },
     });
 
-    console.log("user", user);
-
     if (!user) {
       throw new ApiError(401, "Invalid email or password");
     }
@@ -89,6 +90,7 @@ export class UserService {
     }
     const tokens = generateTokens(user);
     user.refreshToken = tokens.refreshToken;
+
     await this.userRepository.save(user);
 
     return { user, tokens };
@@ -163,6 +165,98 @@ export class UserService {
     user.isActive = false;
     user.refreshToken = undefined;
     await this.userRepository.save(user);
+  }
+
+  async forgetPassword(email: string): Promise<string> {
+    const user = await this.userRepository.findOne({
+      where: { email: email, isActive: true },
+      select: ["id", "email", "name"], // Don't select sensitive fields
+    });
+
+    if (!user) {
+      throw new ApiError(404, "User with this email does not exist");
+    }
+
+    const resetToken = crypto.randomBytes(32).toString("hex");
+
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
+
+    user.resetPasswordToken = hashedToken;
+    user.resetPasswordExpires = new Date(Date.now() + 3600000); // 1 hour
+
+    await this.userRepository.save(user);
+
+    console.log(`Password reset initiated for ${email}`);
+
+    const emailBody = `Hello ${user.name},<br/><br/>
+        You have requested for Password reset.<br/><br/>
+        <b>Reset Token: ${resetToken}</b><br/><br/>
+        Click <a href="${FRONTEND_URL}reset-password/${resetToken}">here</a> to join the session.<br/><br/>
+        Best regards,<br/>
+        AI KYC Team
+        `;
+    await sendMail(user.email, "Password Reset Link", emailBody);
+
+    return resetToken;
+  }
+
+  async resetPassword(token: string, newPasswordPlain: string): Promise<void> {
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+    // Find user with matching token that hasn't expired
+    const user = await this.userRepository.findOne({
+      where: {
+        resetPasswordToken: hashedToken,
+        resetPasswordExpires: MoreThan(new Date()),
+        isActive: true,
+      },
+      select: ["id", "resetPasswordToken", "resetPasswordExpires", "password"],
+    });
+
+    if (!user) {
+      throw new ApiError(400, "Invalid or expired reset token");
+    }
+
+    user.password = newPasswordPlain;
+
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+
+    await this.userRepository.save(user);
+
+    console.log(`Password successfully reset for user ${user.id}`);
+  }
+
+  // Change Password - For authenticated users
+  async changePassword(
+    id: string,
+    currentPassword: string,
+    newPassword: string
+  ): Promise<void> {
+    const user = await this.userRepository.findOne({
+      where: { id, isActive: true },
+      select: ["id", "password"], // Include password for comparison
+    });
+
+    if (!user) {
+      throw new ApiError(404, "User not found");
+    }
+
+    // Verify current password
+    const isCurrentPasswordValid = await user.comparePassword(currentPassword);
+
+    if (!isCurrentPasswordValid) {
+      throw new ApiError(401, "Current password is incorrect");
+    }
+
+    // Update to new password
+    user.password = newPassword;
+    await this.userRepository.save(user);
+
+    console.log(`Password successfully changed for user ${id}`);
   }
 
   // Upload profile image
@@ -244,188 +338,6 @@ export class UserService {
         `User ${userId} stage updated from ${user.currentStage} to ${newStage}`
       );
     }
-  }
-
-  // EPIC3 - VIDEO KYC (Placeholder for future implementation)
-  async videoKYC(
-    userId: string,
-    sessionId?: string,
-    agentData?: any
-  ): Promise<any> {
-    // Step 1: Find the session with completed EPIC1 and EPIC2
-    let session: UserKYCSession | null;
-
-    if (sessionId) {
-      session = await this.KYCSessionRepository.findOne({
-        where: { id: sessionId, userId: userId },
-      });
-    } else {
-      session = await this.KYCSessionRepository.findOne({
-        where: {
-          userId: userId,
-          // Both EPIC1 and EPIC2 should be completed
-        },
-        order: { createdAt: "DESC" },
-      });
-    }
-
-    if (!session) {
-      throw new ApiError(404, "No eligible KYC session found for Video KYC");
-    }
-
-    if (
-      session.EPIC1?.status !== "completed" ||
-      session.EPIC2?.status !== "completed"
-    ) {
-      throw new ApiError(
-        400,
-        "Document processing and face verification must be completed before Video KYC"
-      );
-    }
-
-    // Step 2: Initialize EPIC3
-    session.EPIC3 = {
-      status: Status.PENDING,
-      message: "Video KYC session started",
-      data: {
-        checklist: {
-          agentVerification: false,
-          documentReview: false,
-          faceComparison: false,
-          addressVerification: false,
-          signatureVerification: false,
-        },
-      },
-      meta: {
-        startedAt: new Date().toISOString(),
-        agentId: agentData?.agentId || null,
-        sessionType: "video_kyc",
-      },
-    };
-
-    await this.KYCSessionRepository.save(session);
-
-    console.log(
-      "--------------------------- VIDEO KYC STARTED ---------------------------\n"
-    );
-    console.log("KYC Session ID\t:\t", session.id);
-    console.log("User ID\t:\t", userId);
-    console.log("Agent ID\t:\t", agentData?.agentId || "TBD");
-    console.log(
-      "\n-----------------------------------------------------------------------\n"
-    );
-
-    return {
-      sessionId: session.id,
-      status: "started",
-      message: "Video KYC session initiated successfully",
-      checklist: session.EPIC3.data.checklist,
-      // nextSteps: [
-      //   "Agent will verify user identity",
-      //   "Document details will be reviewed",
-      //   "Live face comparison will be performed",
-      //   "Address verification will be conducted",
-      //   "Signature verification will be completed",
-      // ],
-    };
-  }
-  // Complete Video KYC (called after agent verification)
-  async completeVideoKYC(
-    userId: string,
-    sessionId: string,
-    verificationData: {
-      agentVerification: boolean;
-      documentReview: boolean;
-      faceComparison: boolean;
-      addressVerification: boolean;
-      signatureVerification: boolean;
-      agentNotes?: string;
-    }
-  ): Promise<any> {
-    const session = await this.KYCSessionRepository.findOne({
-      where: { id: sessionId, userId: userId },
-    });
-
-    if (!session || !session.EPIC3) {
-      throw new ApiError(404, "Video KYC session not found");
-    }
-
-    const allChecksCompleted = Object.values(verificationData).every(
-      (check, index) =>
-        index === Object.values(verificationData).length - 1 || check === true
-    );
-
-    if (allChecksCompleted) {
-      session.EPIC3 = {
-        status: Status.COMPLETED,
-        message: "Video KYC completed successfully",
-        data: {
-          checklist: {
-            agentVerification: verificationData.agentVerification,
-            documentReview: verificationData.documentReview,
-            faceComparison: verificationData.faceComparison,
-            addressVerification: verificationData.addressVerification,
-            signatureVerification: verificationData.signatureVerification,
-          },
-          agentNotes: verificationData?.agentNotes || "",
-        },
-        meta: {
-          completedAt: new Date().toISOString(),
-          verificationScore: "passed",
-        },
-      };
-
-      session.status = Status.COMPLETED; // All EPICs done, ready for compliance
-      session.completedAt = new Date();
-    } else {
-      session.EPIC3 = {
-        status: Status.FAILED,
-        message: "Video KYC verification failed",
-        data: {
-          checklist: {
-            agentVerification: verificationData.agentVerification,
-            documentReview: verificationData.documentReview,
-            faceComparison: verificationData.faceComparison,
-            addressVerification: verificationData.addressVerification,
-            signatureVerification: verificationData.signatureVerification,
-          },
-          agentNotes: verificationData.agentNotes || "",
-        },
-        meta: {
-          failedAt: new Date().toISOString(),
-          verificationScore: "failed",
-        },
-      };
-      // Status remains pending for retry
-    }
-
-    await this.KYCSessionRepository.save(session);
-
-    // Update user stage if EPIC3 completed successfully
-    if (session.EPIC3.status === "completed") {
-      await this.updateUserStage(userId);
-    }
-
-    console.log(
-      "--------------------------- VIDEO KYC COMPLETED ---------------------------\n"
-    );
-    console.log("KYC Session ID\t:\t", session.id);
-    console.log("Status\t:\t", session.EPIC3.status);
-    console.log("All Checks Passed\t:\t", allChecksCompleted);
-    console.log(
-      "\n------------------------------------------------------------------------\n"
-    );
-
-    return {
-      sessionId: session.id,
-      status: session.EPIC3.status,
-      message: session.EPIC3.message,
-      checklist: session.EPIC3.data.checklist,
-      allEpicsCompleted:
-        session.EPIC1?.status === "completed" &&
-        session.EPIC2?.status === "completed" &&
-        session.EPIC3?.status === "completed",
-    };
   }
 
   // Admin function to handle compliance check and final verification
