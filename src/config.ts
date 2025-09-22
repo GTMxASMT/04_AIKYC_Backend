@@ -151,7 +151,7 @@ export enum KYCStage {
 }
 
 export enum Status {
-  PENDING = "pending", //default
+  PENDING = "pending", 
   FAILED = "failed",
   COMPLETED = "completed",
 

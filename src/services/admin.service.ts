@@ -390,169 +390,238 @@ export class AdminService {
     };
   }
 
-  // Helper: Count true values in documents object
-  private countTrueDocs(docs: any): number {
-    return Object.entries(docs).filter(
-      ([key, value]) => key !== "any" && value === true
-    ).length;
-  }
+  // Updated methods for AdminService class
 
-  // Helper: Get document names that are true (excluding 'any')
-  private getTrueDocNames(docs: any): string[] {
-    return Object.entries(docs)
-      .filter(([key, value]) => key !== "any" && value === true)
-      .map(([key]) => key.toUpperCase());
-  }
+// Helper: Count true values in documents object
+private countTrueDocs(docs: { [key: string]: boolean }): number {
+  return Object.values(docs).filter(Boolean).length;
+}
 
-  // Get current active configuration
-  private async getActiveConfig(): Promise<KYCDocumentsConfig> {
-    console.log("Fetching active KYC document configuration...");
-    let config = await this.configRepository.findOne({
-      where: { isActive: true },
+// Helper: Get document names that are true
+private getTrueDocNames(docs: { [key: string]: boolean }): string[] {
+  return Object.entries(docs)
+    .filter(([_, value]) => value === true)
+    .map(([key]) => key);
+}
+
+// Get current active configuration
+private async getActiveConfig(): Promise<KYCDocumentsConfig> {
+  console.log("Fetching active KYC document configuration...");
+  let config = await this.configRepository.findOne({
+    where: { isActive: true },
+  });
+
+  if (!config) {
+    const defaultAccepted: AcceptedConfig = {
+      documents: {
+        aadhaar: true,
+        pan: true,
+        passport: false,
+      },
+      acceptedDocumentsCount: 2,
+    };
+
+    const defaultRequired: RequiredConfig = {
+      totalRequiredDocumentsCount: 1,
+      requiredDocumentOptions: {"1": ["aadhaar"], "2": [], "3": []},
+      leftDocs: ["pan", "passport"]
+    };
+
+    console.log("No active config found, creating default configuration.");
+    config = this.configRepository.create({
+      accepted: defaultAccepted,
+      required: defaultRequired,
+      isActive: true,
+      updatedBy: "SYSTEM",
     });
+    console.log("Default Config:", config);
+    await this.configRepository.save(config);
+    console.log("Default configuration saved.");
+  }
 
-    if (!config) {
-      const defaultAccepted: AcceptedConfig = {
-        documents: {
-          aadhar: true,
-          pan: true,
-          passport: false,
-        },
-        // totalDocumentsCount: 3,
-        acceptedDocumentsCount: 2,
-      };
-//      {
-// "documents": {"any": true, "pan": false, "aadhaar": false, "passport": false}, 
-// "totalRequiredDocumentsCount": 1, 
-// requiredDocumentOptions : {"1":["aadhaar"] , "2":[], "3":[]}, 
-// leftDocs : ["pan", "passport"]}
+  return config;
+}
 
-      
-      const defaultRequired: RequiredConfig = {
-        // documents: {
-        //   aadhar: false,
-        //   pan: false,
-        //   passport: false,
-        //   any: true,
-        // },
-        totalRequiredDocumentsCount: 1,
-        requiredDocumentOptions : {"1":["aadhaar"] , "2":[], "3":[]},
-        leftDocs : ["pan", "passport"]
-        // selectedRequiredDocumentsCount: 1,
-      };
+// GET /admin/accepted-documents
+async getAcceptedDocuments(): Promise<AcceptedConfig> {
+  const config = await this.getActiveConfig();
+  return config.accepted;
+}
 
-      console.log("No active config found, creating default configuration.");
-      config = this.configRepository.create({
-        accepted: defaultAccepted,
-        required: defaultRequired,
-        isActive: true,
-        updatedBy: "SYSTEM",
-      });
-      console.log("Default Config:", config);
-      await this.configRepository.save(config);
-      console.log("Default configuration saved.");
+// GET /admin/required-documents
+async getRequiredDocuments(): Promise<RequiredConfig> {
+  const config = await this.getActiveConfig();
+  return config.required;
+}
+
+// POST /admin/accepted-documents
+async setAcceptedDocuments(
+  acceptedConfig: AcceptedConfig,
+  updatedBy: string
+): Promise<void> {
+  console.log("Accepted Config Received:", acceptedConfig);
+
+  // Validate the accepted configuration structure
+  const requiredDocTypes = ['aadhaar', 'pan', 'passport'];
+  
+  // Ensure all required document types are present
+  for (const docType of requiredDocTypes) {
+    if (typeof acceptedConfig.documents[docType as keyof typeof acceptedConfig.documents] !== 'boolean') {
+      throw new ApiError(400, `Document type '${docType}' must be a boolean value`);
+    }
+  }
+
+  // Validate acceptedDocumentsCount matches actual count
+  const actualAcceptedCount = this.countTrueDocs(acceptedConfig.documents);
+  if (actualAcceptedCount !== acceptedConfig.acceptedDocumentsCount) {
+    throw new ApiError(
+      400, 
+      `acceptedDocumentsCount (${acceptedConfig.acceptedDocumentsCount}) does not match actual count of accepted documents (${actualAcceptedCount})`
+    );
+  }
+
+  // At least one document must be accepted
+  if (actualAcceptedCount === 0) {
+    throw new ApiError(400, "At least one document type must be accepted");
+  }
+
+  // Get current configuration
+  const config = await this.getActiveConfig();
+
+  // Get currently accepted document names
+  const newAcceptedDocNames = this.getTrueDocNames(acceptedConfig.documents);
+  console.log("New Accepted Document Names:", newAcceptedDocNames);
+
+  // Check if any required documents are being removed from accepted list
+  const requiredDocs = [
+    ...config.required.requiredDocumentOptions['1'],
+    ...config.required.requiredDocumentOptions['2'],
+    ...config.required.requiredDocumentOptions['3']
+  ];
+
+  const invalidRequired = requiredDocs.filter(
+    (reqDoc) => !newAcceptedDocNames.includes(reqDoc)
+  );
+
+  if (invalidRequired.length > 0) {
+    throw new ApiError(
+      400,
+      `Cannot remove documents that are set as required: ${invalidRequired.join(", ")}`
+    );
+  }
+
+  console.log("Updating accepted documents to:", newAcceptedDocNames);
+
+  // Update the configuration
+  config.accepted = acceptedConfig;
+  config.updatedBy = updatedBy;
+  config.updatedAt = new Date();
+  
+  await this.configRepository.save(config);
+  console.log("Accepted documents configuration updated successfully");
+}
+
+// PUT /admin/required-documents
+async setRequiredDocuments(
+  requiredConfig: RequiredConfig,
+  updatedBy: string
+): Promise<void> {
+  console.log("Required Config Received:", requiredConfig);
+
+  // Validate the required configuration structure
+  const validDocTypes = ['aadhaar', 'pan', 'passport'];
+  const validSlots = ['1', '2', '3'];
+
+  // Validate totalRequiredDocumentsCount
+  if (requiredConfig.totalRequiredDocumentsCount < 0 || 
+      requiredConfig.totalRequiredDocumentsCount > 3) {
+    throw new ApiError(400, "totalRequiredDocumentsCount must be between 0 and 3");
+  }
+
+  // Validate requiredDocumentOptions structure
+  for (const slot of validSlots) {
+    if (!Array.isArray(requiredConfig.requiredDocumentOptions[slot as keyof typeof requiredConfig.requiredDocumentOptions])) {
+      throw new ApiError(400, `requiredDocumentOptions['${slot}'] must be an array`);
     }
 
-    return config;
-  }
-
-  //GET /admin/accepted-documents
-  async getAcceptedDocuments(): Promise<AcceptedConfig> {
-    const config = await this.getActiveConfig();
-    return config.accepted;
-  }
-
-  //GET /admin/required-documents
-  async getRequiredDocuments(): Promise<RequiredConfig> {
-    const config = await this.getActiveConfig();
-    return config.required;
-  }
-
-  //POST /admin/accepted-documents
-  async setAcceptedDocuments(
-    acceptedConfig: AcceptedConfig,
-    updatedBy: string
-  ): Promise<void> {
-    console.log("Accepted Config Received:", acceptedConfig);
-    const acceptedCount = this.countTrueDocs(acceptedConfig.documents);
-
-    if (acceptedCount === 0) {
-      throw new ApiError(400, "At least one document must be accepted");
+    // Validate each document in the slot
+    for (const doc of requiredConfig.requiredDocumentOptions[slot as keyof typeof requiredConfig.requiredDocumentOptions]) {
+      if (!validDocTypes.includes(doc)) {
+        throw new ApiError(
+          400, 
+          `Invalid document type '${doc}' in slot '${slot}'. Must be one of: ${validDocTypes.join(', ')}`
+        );
+      }
     }
-
-    const config = await this.getActiveConfig();
-
-    const acceptedDocNames = this.getTrueDocNames(acceptedConfig.documents);
-    console.log("Accepted Document Names:", acceptedDocNames);
-
-    // const requiredDocNames = this.getTrueDocNames(config.required.documents);
-    // console.log("Currently Required Document Names:", requiredDocNames);
-
-    // const invalidRequired = requiredDocNames.filter(
-    //   (reqDoc) => !acceptedDocNames.includes(reqDoc)
-    // );
-
-    // console.log("Invalid Required Documents:", invalidRequired);
-
-    // if (invalidRequired.length > 0) {
-    //   throw new ApiError(
-    //     400,
-    //     `Cannot remove documents that are set as required: ${invalidRequired.join(
-    //       ", "
-    //     )}`
-    //   );
-    // }
-
-    console.log("Updating accepted documents to:", acceptedDocNames);
-
-    config.accepted = acceptedConfig;
-    config.updatedBy = updatedBy;
-    await this.configRepository.save(config);
   }
 
-  //PUT /admin/required-documents
-  async setRequiredDocuments(
-    requiredConfig: RequiredConfig,
-    updatedBy: string
-  ): Promise<void> {
-    // const specificRequiredCount = this.countTrueDocs(requiredConfig.documents);
-
-    // Validation: If specific documents are required, count should make sense
-
-    const config = await this.getActiveConfig();
-
-    // Check if required specific documents are in accepted list
-    const acceptedDocNames = this.getTrueDocNames(config.accepted.documents);
-    // const requiredDocNames = this.getTrueDocNames(requiredConfig.documents);
-
-    // const invalidRequired = requiredDocNames.filter(
-    //   (reqDoc) => !acceptedDocNames.includes(reqDoc)
-    // );
-
-    // if (invalidRequired.length > 0) {
-    //   throw new ApiError(
-    //     400,
-    //     `These required documents are not in accepted list: ${invalidRequired.join(
-    //       ", "
-    //     )}`
-    //   );
-    // }
-
-    // Logic validation: If all required docs are specific and any=true, that's redundant
-    // if (
-    //   specificRequiredCount === requiredConfig.totalRequiredDocumentsCount &&
-    //   requiredConfig.documents.any
-    // ) {
-    //   console.warn(
-    //     "Warning: All required positions are filled with specific docs, 'any' flag is redundant"
-    //   );
-    // }
-
-    // Update required configuration
-    config.required = requiredConfig;
-    config.updatedBy = updatedBy;
-    await this.configRepository.save(config);
+  // Validate leftDocs array
+  if (!Array.isArray(requiredConfig.leftDocs)) {
+    throw new ApiError(400, "leftDocs must be an array");
   }
+
+  for (const doc of requiredConfig.leftDocs) {
+    if (!validDocTypes.includes(doc)) {
+      throw new ApiError(
+        400, 
+        `Invalid document type '${doc}' in leftDocs. Must be one of: ${validDocTypes.join(', ')}`
+      );
+    }
+  }
+
+  // Validate that all documents are accounted for (no missing, no extras)
+  const allRequiredDocs = [
+    ...requiredConfig.requiredDocumentOptions["1"],
+    ...requiredConfig.requiredDocumentOptions["2"],
+    ...requiredConfig.requiredDocumentOptions["3"],
+    ...requiredConfig.leftDocs,
+  ];
+
+  const uniqueDocs = [...new Set(allRequiredDocs)];
+  if (uniqueDocs.length !== validDocTypes.length || 
+      !validDocTypes.every(doc => uniqueDocs.includes(doc))) {
+    throw new ApiError(
+      400, 
+      "All document types must be accounted for across requiredDocumentOptions and leftDocs"
+    );
+  }
+
+  // Validate no duplicate documents across requirement slots
+  const requiredDocs = [
+    ...requiredConfig.requiredDocumentOptions['1'],
+    ...requiredConfig.requiredDocumentOptions['2'],
+    ...requiredConfig.requiredDocumentOptions['3']
+  ];
+  if (requiredDocs.length !== [...new Set(requiredDocs)].length) {
+    throw new ApiError(400, "Duplicate documents found across requirement slots");
+  }
+
+  // Get current configuration to check against accepted documents
+  const config = await this.getActiveConfig();
+  const acceptedDocNames = this.getTrueDocNames(config.accepted.documents);
+
+  // Check if required documents are in accepted list
+  const invalidRequired = requiredDocs.filter(
+    (reqDoc) => !acceptedDocNames.includes(reqDoc)
+  );
+
+  if (invalidRequired.length > 0) {
+    throw new ApiError(
+      400,
+      `These required documents are not in accepted list: ${invalidRequired.join(", ")}`
+    );
+  }
+
+  console.log("Updating required documents configuration");
+
+  // Update the configuration
+  config.required = requiredConfig;
+  config.updatedBy = updatedBy;
+  config.updatedAt = new Date();
+  
+  await this.configRepository.save(config);
+  console.log("Required documents configuration updated successfully");
+}
 
   // Helper func- validate user's documents against current config
 

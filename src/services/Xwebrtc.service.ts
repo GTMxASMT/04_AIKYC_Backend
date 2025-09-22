@@ -70,6 +70,7 @@ export class XWebRTCService {
       email: userData?.email,
       extracted_data: userData?.KYCSessions?.[0]?.EPIC1?.data?.extracted_data,
       uploaded_doc: userData?.KYCSessions?.[0]?.EPIC1?.data?.predicted_class,
+      doc_url : userData?.KYCSessions?.[0]?.fileURL
     };
     return data;
   }

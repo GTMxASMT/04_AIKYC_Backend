@@ -279,9 +279,7 @@ export class AIService {
   // EPIC2 - LIVENESS CHECK START
   async LivenessCheckStart(): Promise<string> {
     const params = {
-      ClientRequestToken: `${Date.now()}-${Math.random()
-        .toString(36)
-        .substring(2, 9)}`,
+      ClientRequestToken: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       Settings: {
         OutputConfig: {
           S3Bucket: config.aws.s3BucketName || "d-ai-kyc",

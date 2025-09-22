@@ -652,61 +652,242 @@ export class AdminController {
   });
 
   // PUT /admin/accepted-documents
-  setAcceptedDocuments = asyncHandler(async (req: Request, res: Response) => {
-    console.log("Request body for accepted documents:", req.body);
-    const acceptedConfig = req.body;
+ // Updated methods for AdminController class
 
-    // Validate required structure
-    if (!acceptedConfig || !acceptedConfig.documents) {
+// PUT /admin/accepted-documents
+setAcceptedDocuments = asyncHandler(async (req: Request, res: Response) => {
+  console.log("Request body for accepted documents:", req.body);
+  const acceptedConfig = req.body;
+
+  // Validate required structure
+  if (!acceptedConfig || !acceptedConfig.documents) {
+    res
+      .status(400)
+      .json(
+        new ApiResponse(
+          400,
+          null,
+          "Invalid format. Expected: { documents: { aadhaar: boolean, pan: boolean, passport: boolean }, acceptedDocumentsCount: number }"
+        )
+      );
+    return;
+  }
+
+  // Validate documents object structure
+  const { documents } = acceptedConfig;
+  const requiredDocTypes = ['aadhaar', 'pan', 'passport'];
+  
+  // Check if all required document types are present and are booleans
+  for (const docType of requiredDocTypes) {
+    if (typeof documents[docType] !== 'boolean') {
       res
         .status(400)
         .json(
           new ApiResponse(
             400,
             null,
-            "Invalid format. Expected: { documents: { aadhar: boolean, pan: boolean, ... } }"
+            `Invalid document type '${docType}'. Must be boolean.`
           )
         );
       return;
     }
+  }
 
-    const updatedBy = "ADMIN";
-
-    await this.adminService.setAcceptedDocuments(acceptedConfig, updatedBy);
-
+  // Validate acceptedDocumentsCount
+  if (typeof acceptedConfig.acceptedDocumentsCount !== 'number' || 
+      acceptedConfig.acceptedDocumentsCount < 0 || 
+      acceptedConfig.acceptedDocumentsCount > 3) {
     res
-      .status(200)
+      .status(400)
       .json(
-        new ApiResponse(200, null, "Accepted documents updated successfully")
+        new ApiResponse(
+          400,
+          null,
+          "acceptedDocumentsCount must be a number between 0 and 3"
+        )
       );
-  });
+    return;
+  }
 
-  // PUT /admin/required-documents
-  setRequiredDocuments = asyncHandler(async (req: Request, res: Response) => {
-    const requiredConfig = req.body;
+  // Validate that acceptedDocumentsCount matches actual count of true values
+  const actualAcceptedCount = Object.values(documents).filter(Boolean).length;
+  if (actualAcceptedCount !== acceptedConfig.acceptedDocumentsCount) {
+    res
+      .status(400)
+      .json(
+        new ApiResponse(
+          400,
+          null,
+          `acceptedDocumentsCount (${acceptedConfig.acceptedDocumentsCount}) does not match actual count of accepted documents (${actualAcceptedCount})`
+        )
+      );
+    return;
+  }
 
-    // Validate required structure
-    if (!requiredConfig || !requiredConfig.documents) {
+  // At least one document must be accepted
+  if (actualAcceptedCount === 0) {
+    res
+      .status(400)
+      .json(
+        new ApiResponse(
+          400,
+          null,
+          "At least one document type must be accepted"
+        )
+      );
+    return;
+  }
+
+  const updatedBy = req.user?.id || "ADMIN";
+
+  await this.adminService.setAcceptedDocuments(acceptedConfig, updatedBy);
+
+  res
+    .status(200)
+    .json(
+      new ApiResponse(200, null, "Accepted documents updated successfully")
+    );
+});
+
+// PUT /admin/required-documents
+setRequiredDocuments = asyncHandler(async (req: Request, res: Response) => {
+  console.log("Request body for required documents:", req.body);
+  const requiredConfig = req.body;
+
+  // Validate required structure
+  if (!requiredConfig || 
+      typeof requiredConfig.totalRequiredDocumentsCount !== 'number' ||
+      !requiredConfig.requiredDocumentOptions ||
+      !Array.isArray(requiredConfig.leftDocs)) {
+    res
+      .status(400)
+      .json(
+        new ApiResponse(
+          400,
+          null,
+          "Invalid format. Expected: { totalRequiredDocumentsCount: number, requiredDocumentOptions: {}, leftDocs: string[] }"
+        )
+      );
+    return;
+  }
+
+  // Validate totalRequiredDocumentsCount
+  if (requiredConfig.totalRequiredDocumentsCount < 0 || 
+      requiredConfig.totalRequiredDocumentsCount > 3) {
+    res
+      .status(400)
+      .json(
+        new ApiResponse(
+          400,
+          null,
+          "totalRequiredDocumentsCount must be between 0 and 3"
+        )
+      );
+    return;
+  }
+
+  // Validate requiredDocumentOptions structure
+  const { requiredDocumentOptions } = requiredConfig;
+  const validSlots = ['1', '2', '3'];
+  const validDocTypes = ['aadhaar', 'pan', 'passport'];
+
+  for (const slot of validSlots) {
+    if (!Array.isArray(requiredDocumentOptions[slot])) {
       res
         .status(400)
         .json(
           new ApiResponse(
             400,
             null,
-            "Invalid format. Expected: { count: number, documents: { aadhar: boolean, pan: boolean, ..., any: boolean } }"
+            `requiredDocumentOptions['${slot}'] must be an array`
           )
         );
       return;
     }
 
-    const updatedBy = "ADMIN";
+    // Validate each document in the slot
+    for (const doc of requiredDocumentOptions[slot]) {
+      if (!validDocTypes.includes(doc)) {
+        res
+          .status(400)
+          .json(
+            new ApiResponse(
+              400,
+              null,
+              `Invalid document type '${doc}' in slot '${slot}'. Must be one of: ${validDocTypes.join(', ')}`
+            )
+          );
+        return;
+      }
+    }
+  }
 
-    await this.adminService.setRequiredDocuments(requiredConfig, updatedBy);
+  // Validate leftDocs array
+  for (const doc of requiredConfig.leftDocs) {
+    if (!validDocTypes.includes(doc)) {
+      res
+        .status(400)
+        .json(
+          new ApiResponse(
+            400,
+            null,
+            `Invalid document type '${doc}' in leftDocs. Must be one of: ${validDocTypes.join(', ')}`
+          )
+        );
+      return;
+    }
+  }
 
+  // Validate that total documents across all slots + leftDocs equals all document types
+  const allRequiredDocs = [
+    ...requiredDocumentOptions['1'],
+    ...requiredDocumentOptions['2'],
+    ...requiredDocumentOptions['3'],
+    ...requiredConfig.leftDocs
+  ];
+
+  const uniqueDocs = [...new Set(allRequiredDocs)];
+  if (uniqueDocs.length !== validDocTypes.length || 
+      !validDocTypes.every(doc => uniqueDocs.includes(doc))) {
     res
-      .status(200)
+      .status(400)
       .json(
-        new ApiResponse(200, null, "Required documents updated successfully")
+        new ApiResponse(
+          400,
+          null,
+          "All document types must be accounted for across requiredDocumentOptions and leftDocs"
+        )
       );
-  });
+    return;
+  }
+
+  // Validate no duplicate documents across slots
+  const requiredDocs = [
+    ...requiredDocumentOptions['1'],
+    ...requiredDocumentOptions['2'],
+    ...requiredDocumentOptions['3']
+  ];
+  if (requiredDocs.length !== [...new Set(requiredDocs)].length) {
+    res
+      .status(400)
+      .json(
+        new ApiResponse(
+          400,
+          null,
+          "Duplicate documents found across requirement slots"
+        )
+      );
+    return;
+  }
+
+  const updatedBy = req.user?.id || "ADMIN";
+
+  await this.adminService.setRequiredDocuments(requiredConfig, updatedBy);
+
+  res
+    .status(200)
+    .json(
+      new ApiResponse(200, null, "Required documents updated successfully")
+    );
+});
 }

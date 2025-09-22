@@ -8,25 +8,21 @@ import {
 
 export interface AcceptedConfig {
   documents: {
-    aadhar: boolean;
+    aadhaar: boolean;  // Note: changed from 'aadhar' to 'aadhaar' to match your format
     pan: boolean;
     passport: boolean;
   };
-  // totalDocumentsCount: number;  //remove
   acceptedDocumentsCount: number;
 }
 
 export interface RequiredConfig {
-  // documents: {
-  //   aadhar?: boolean;
-  //   pan?: boolean;
-  //   passport?: boolean;
-  //   any?: boolean;
-  // };
   totalRequiredDocumentsCount: number;
-  requiredDocumentOptions : {}
-  leftDocs : string []
-  // selectedRequiredDocumentsCount: number; //remove
+  requiredDocumentOptions: {
+    "1": string[];
+    "2": string[];
+    "3": string[];
+  };
+  leftDocs: string[];
 }
 
 @Entity()
